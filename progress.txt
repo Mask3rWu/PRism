@@ -15,6 +15,8 @@
 - Agent nodes manage their own DB sessions via `SessionLocal()` — not via FastAPI's `Depends(get_db)`
 - Graph nodes return `dict` (partial state updates) — return `{"summary_result": result}` not the full state
 - `CompiledStateGraph` is the return type of `.compile()`, not `StateGraph`
+- LangGraph parallel fan-out/fan-in: fan-out by adding edges from one node to multiple targets; fan-in by adding edges from multiple nodes to one target (LangGraph waits for all to complete before invoking the target)
+- New agent nodes touch exactly 4 files: prompt .md, node .py, states.py, review_graph.py — follow the test_suggestions.py template
 
 ---
 
@@ -171,4 +173,32 @@
 - **Learnings for future iterations:**
   - Agent nodes are now fully templated — the 5th node (test_suggestions) followed the exact same 4-file touch pattern
   - US-012 will refactor the sequential graph into parallel execution (summary → [risk, issues, tests] concurrently)
+---
+## 2026/05/29 21:30 - US-012
+- Implemented Comment Compose Agent node + parallel graph rewiring
+- Created backend/agents/prompts/comment_compose.md: prompt template for composing GitHub comment from all agent results
+- Created backend/agents/nodes/comment_compose.py: follows same agent node pattern, writes formatted Markdown to review.comment_content
+- Extended ReviewState with comment_result field
+- Rewired review_graph.py: summary -> [risk_analysis, issue_detection, test_suggestions] (parallel) -> comment_compose -> END
+- Files changed: backend/agents/nodes/comment_compose.py (new), backend/agents/prompts/comment_compose.md (new), backend/agents/review_graph.py, backend/agents/states.py
+- PR: #10 (branch: feat/US-012-comment-compose-parallel-graph)
+- **Learnings for future iterations:**
+  - LangGraph parallel fan-out/fan-in: add edges from one node to N targets for fan-out, add edges from N nodes to one target for fan-in. LangGraph waits for all incoming edges to complete.
+  - The comment_compose node writes to review.comment_content (Text column) which US-013 will use for GitHub writeback
+---
+
+## 2026/05/29 - US-013
+- Implemented GitHub PR comment writeback: auto-post review comment after graph completion, with retry endpoint
+- Added `writeback_comment()` to backend/services/github/client.py — POSTs to /repos/{owner}/{repo}/issues/{pr_number}/comments
+- Extended `_run_review_background` in service.py: after graph succeeds, replaces placeholder link with actual platform review URL and posts comment; on failure sets writeback_error but does not change review status
+- Added `POST /api/reviews/{id}/retry-writeback` endpoint for manual retry (uses SessionLocal for DB, makes async HTTP call)
+- Added `FRONTEND_URL` config setting (default http://localhost:3000) for constructing review detail page link
+- Files changed: backend/services/github/client.py, backend/services/review/service.py, backend/api/reviews.py, backend/core/config.py
+- PR: #11 (branch: feat/US-013-github-comment-writeback)
+- **Learnings for future iterations:**
+  - GitHub issue comments API endpoint: `POST /repos/{owner}/{repo}/issues/{pr_number}/comments` with JSON body `{"body": "markdown"}`, returns 201 on success
+  - PRs in GitHub are also issues — the comments endpoint uses `/issues/{number}/comments` not `/pulls/{number}/comments`
+  - Writeback fails gracefully: don't fail the review, just set writeback_error so the user can retry
+  - Async endpoints in FastAPI that use SessionLocal() should manually call db.close() in a finally block
+  - The comment_compose prompt uses `https://github.com` as a placeholder link — replace with actual platform URL before posting
 ---
