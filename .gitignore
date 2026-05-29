@@ -5,3 +5,5 @@ scripts/
 
 
 backend/.env
+__pycache__/
+*.db
