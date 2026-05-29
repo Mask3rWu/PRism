@@ -287,3 +287,20 @@
   - PUT endpoint takes partial updates (description, pat only) — no need to send the full project
 ---
 
+## 2026/05/29 - US-019
+- Implemented review progress polling in PRList: after triggering review, polls GET /api/reviews/{id}/status every 3 seconds
+- Active review IDs tracked in useRef (always current in interval closure), state for display only
+- Stage labels displayed with pulse animation below status badge for active reviews
+- Stage mapping: internal names (analyzing_risks, detecting_issues, etc.) → human-readable labels
+- On failure: error message shown inline, action button changes to "Retry"
+- On terminal state (succeeded/failed): removes from polling map, stops interval when all done
+- Added ReviewStatusResponse type to types/index.ts
+- Files changed: web/src/components/PRList.tsx, web/src/types/index.ts
+- PR: #17 (branch: feat/US-019-review-progress-polling)
+- **Learnings for future iterations:**
+  - When polling in React, use useRef for the active-set so interval closures always read current values; use useState only for display
+  - Stage values come from the backend agent nodes — map internal snake_case names to user-friendly labels in the frontend
+  - The trigger endpoint returns a ReviewResponse with `id` — capture this to bind the polling to the correct review
+  - To re-trigger a failed review, the same POST /api/projects/{id}/pulls/{pr_number}/review endpoint works once the previous review is no longer queued/running
+---
+
