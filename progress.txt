@@ -79,3 +79,21 @@
   - `httpx.Client.get(params=...)` needs explicit type annotation `dict[str, str | int]` when mixing str and int values
 ---
 
+## 2026/05/29 21:00 - US-006
+- Implemented POST /api/projects/{id}/pulls/{pr_number}/review trigger endpoint
+- Added `diff_content` column to Review model for storing PR diff (needed by later agent graph stories)
+- Added `fetch_pr_detail()` and `fetch_pr_diff()` to GitHub client for single-PR operations
+- Created `backend/services/review/service.py` with asyncio.Semaphore(3) concurrency limiting
+- Background task: fetches PR diff, updates status (queued→running→succeeded/failed) and stage (fetching_diff→diff_fetched)
+- Duplicate trigger detection: rejects if a review is already queued/running for the same PR (409)
+- Files changed: backend/models.py, backend/api/projects.py, backend/services/github/client.py, backend/schemas/review.py, backend/services/review/__init__.py, backend/services/review/service.py
+- PR: #4 (branch: feat/US-006-trigger-review-endpoint)
+- **Learnings for future iterations:**
+  - FastAPI BackgroundTasks support async functions natively — just pass the coroutine function reference
+  - Use asyncio.Semaphore for in-process concurrency limiting (no need for external task queue)
+  - Background tasks need their own DB session (cannot use Depends) — use SessionLocal() directly
+  - The `from_attributes=True` ConfigDict on Pydantic models serializes SQLAlchemy Enum fields as their string values
+  - GitHub PR diff endpoint: same URL as PR detail, but with `Accept: application/vnd.github.v3.diff` header
+  - Future agent graph stories (US-008+) should extend `_run_review_background` rather than replacing it
+---
+
