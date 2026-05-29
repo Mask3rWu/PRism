@@ -8,11 +8,13 @@ import backend.models  # noqa: F401 — register ORM models with Base.metadata
 
 from backend.api.projects import router as projects_router
 from backend.api.reviews import router as reviews_router
+from backend.seed import seed_database
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    seed_database()
     yield
 
 

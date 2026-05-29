@@ -7,6 +7,7 @@ from backend.models import Project, Review, ReviewStatus
 from backend.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.schemas.pull_request import PullRequestItem
 from backend.schemas.review import ReviewResponse
+from backend.seed import SEED_PR_LISTS
 from backend.services.github.client import fetch_pr_detail, fetch_pulls, validate_pat
 from backend.services.review.service import _run_review_background
 
@@ -80,12 +81,18 @@ async def list_pull_requests(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    prs = await fetch_pulls(
-        project.repo_owner, project.repo_name, project.encrypted_pat,
-        page=page, per_page=per_page,
-    )
-    if prs is None:
-        raise HTTPException(status_code=502, detail="Failed to fetch pull requests from GitHub")
+    if project.is_seeded:
+        all_prs = SEED_PR_LISTS[project.id] if project.id in SEED_PR_LISTS else []
+        start = (page - 1) * per_page
+        prs = all_prs[start : start + per_page]
+    else:
+        github_prs = await fetch_pulls(
+            project.repo_owner, project.repo_name, project.encrypted_pat,
+            page=page, per_page=per_page,
+        )
+        if github_prs is None:
+            raise HTTPException(status_code=502, detail="Failed to fetch pull requests from GitHub")
+        prs = github_prs
 
     pr_numbers = [pr["number"] for pr in prs]
     reviews = db.query(Review).filter(
