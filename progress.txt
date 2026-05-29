@@ -138,3 +138,15 @@
   - Future nodes (US-009~US-012) should follow the same pattern: own DB session, record AgentTiming, update review stage
   - The graph is compiled once at module load time — shared across all requests
 ---
+
+## 2026/05/29 - US-009
+- Implemented LangGraph Risk Analysis Agent node: LLM-powered risk identification from PR diff
+- Created backend/agents/prompts/risk_analysis.md: prompt template for risk categories (auth, DB, concurrency, security, error handling, performance)
+- Created backend/agents/nodes/risk_analysis.py: follows same pattern as summary_node (own SessionLocal(), AgentTiming recording, review stage update)
+- Extended ReviewState with risk_result field; wired risk_analysis sequentially after summary in review_graph.py
+- PR: #7 (branch: feat/US-009-risk-analysis-node)
+- **Learnings for future iterations:**
+  - New agent nodes follow the exact same pattern: SessionLocal() for DB, start/end time AgentTiming, review.stage before and after LLM call
+  - risk_analysis node passes summary_result as JSON string into the prompt for additional context
+  - The review_graph.py mypy return-type warning is pre-existing (LangGraph generic inference limitation) — safe to ignore
+---
