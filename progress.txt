@@ -19,6 +19,9 @@
 - New agent nodes touch exactly 4 files: prompt .md, node .py, states.py, review_graph.py — follow the test_suggestions.py template
 - Use `is_seeded` boolean flag on entities to differentiate mock/local data from real external API data — the API layer checks the flag and skips external calls for seeded entities
 - When resolving mypy cross-branch variable assignments in if/else, use separate intermediate variable names to avoid type narrowing conflicts (e.g., `github_prs` → narrow via `is None` check → assign to `prs`)
+- Frontend uses Tailwind CSS v4 with CSS-based `@theme inline {}` configuration — no tailwind.config.ts file
+- Next.js 16 uses Turbopack as default dev server; API proxying via `rewrites()` in next.config.ts
+- Run frontend commands from `web/` directory: `cd web && npm run <script>`
 
 ---
 
@@ -219,4 +222,20 @@
   - Cross-branch mypy assignment issue: when if/else both assign to the same variable, mypy narrows from the first branch. Fix: use intermediate variable in the else branch, narrow with `is None` check, then assign to the target variable
   - The `is_seeded` flag pattern: add a boolean column to entities, check in the API layer to skip external calls for mock data
   - Seed data module import in main.py must come before lifespan() usage
+---
+
+## 2026/05/29 - US-015
+- Created Next.js 16 + TypeScript + Tailwind CSS v4 (App Router) frontend scaffold in web/
+- Configured API proxy via next.config.ts rewrites: /api/* → localhost:8000
+- Created root layout with sticky header (PRism logo, Projects nav) and dark mode support
+- Created home page with PRism intro content and Get Started button
+- Files changed: web/ (19 files, new project)
+- PR: #13 (branch: feat/US-015-frontend-scaffold)
+- **Learnings for future iterations:**
+  - Next.js 16.2.6 uses Tailwind CSS v4 with `@import "tailwindcss"` and `@theme inline {}` CSS-based configuration (no tailwind.config.ts)
+  - Tailwind v4 dark mode uses `dark:` prefix on utility classes (no `darkMode: "class"` config needed)
+  - Layout uses next/font/google with `variable` prop to expose CSS custom properties
+  - The generated AGENTS.md points to `node_modules/next/dist/docs/` for up-to-date API docs
+  - next-env.d.ts is gitignored (auto-generated) — not committed
+  - Next.js 16 ships with Turbopack as default dev server (next dev uses Turbopack)
 ---
