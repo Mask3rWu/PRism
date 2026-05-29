@@ -23,6 +23,23 @@
 
 ---
 
+## 2026/05/29 19:45 - US-004
+- Created Project CRUD API endpoints: POST/GET/PUT/DELETE /api/projects
+- Created backend/schemas/project.py with ProjectCreate, ProjectUpdate, ProjectResponse schemas
+- Created backend/services/github/client.py with validate_pat() and get_repo() async helpers
+- Created backend/api/projects.py with FastAPI router and SQLAlchemy session DI
+- Registered projects router in backend/main.py
+- Files changed: backend/main.py, backend/api/__init__.py, backend/api/projects.py, backend/schemas/__init__.py, backend/schemas/project.py, backend/services/__init__.py, backend/services/github/__init__.py, backend/services/github/client.py
+- PR: #2 (branch: feat/US-004-project-crud-endpoints)
+- **Learnings for future iterations:**
+  - FastAPI project structure: schemas/ for Pydantic models, api/ for route handlers, services/ for external API calls
+  - ProjectResponse uses ConfigDict(from_attributes=True) to serialize SQLAlchemy models directly
+  - GitHub PAT validation: GET /repos/{owner}/{repo} with Bearer token; 401/403 = bad PAT, 404 = not found
+  - DELETE endpoint returns 204 with no body — FastAPI handles this when the function returns None
+  - All GitHub API calls use httpx.AsyncClient for async HTTP
+
+---
+
 ## 2026/05/29 19:30 - US-003
 - Created backend/core/security.py with encrypt_token() and decrypt_token() using Fernet
 - Created backend/requirements.txt with all project dependencies (was missing, needed for US-001)
