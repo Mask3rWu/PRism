@@ -239,3 +239,23 @@
   - next-env.d.ts is gitignored (auto-generated) — not committed
   - Next.js 16 ships with Turbopack as default dev server (next dev uses Turbopack)
 ---
+
+## 2026/05/29 - US-016
+- Implemented frontend project list page: `/` shows all configured projects with name, repo, description, and creation date
+- Created ProjectCard component with hover effects and dark mode, linking to `/projects/{id}`
+- Created ProjectList client component handling modal state, list refresh, loading, and empty states
+- Created AddProjectModal with full form (name, owner, repo, PAT, description) calling POST /api/projects
+- Created placeholder project detail page at `/projects/[id]`
+- Created shared TypeScript types in web/src/types/index.ts
+- Pages use Server Component for initial data fetch from backend API, avoiding useEffect lint issues
+- Files changed: web/src/app/page.tsx (rewritten), web/src/types/index.ts (new), web/src/components/ProjectCard.tsx (new), web/src/components/ProjectList.tsx (new), web/src/components/AddProjectModal.tsx (new), web/src/app/projects/[id]/page.tsx (new)
+- PR: #14 (branch: feat/US-016-project-list-page)
+- **Learnings for future iterations:**
+  - React 19 eslint rule `react-hooks/set-state-in-effect` forbids calling setState synchronously in useEffect bodies — use Server Components for data fetching instead
+  - Next.js Server Components with `fetch()` need an absolute URL to the backend (http://localhost:8000/api/...), not relative paths
+  - The page.tsx is a Server Component by default; "use client" makes it a Client Component
+  - Tailwind v4 dark mode uses `dark:` prefix classes — no darkMode config needed
+  - Component structure: keep data fetching in Server Components, interactivity in Client Components
+- Manual browser verification needed (no browser tools available)
+---
+
