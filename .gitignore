@@ -1,0 +1,7 @@
+temp/
+.claude/
+scripts/
+/tasks/
+
+
+backend/.env
