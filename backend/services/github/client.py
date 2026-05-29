@@ -72,6 +72,20 @@ async def fetch_pr_diff(owner: str, repo: str, pr_number: int, encrypted_pat: st
     return None
 
 
+async def writeback_comment(owner: str, repo: str, pr_number: int, encrypted_pat: str, body: str) -> bool:
+    """Post a review comment to a GitHub PR issue. Returns True on success."""
+    pat = decrypt_token(encrypted_pat)
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json={"body": body})
+            return response.status_code == 201
+        except httpx.RequestError:
+            return False
+
+
 async def get_repo(owner: str, repo: str, encrypted_pat: str) -> dict | None:
     """Fetch repository info from GitHub using a stored encrypted PAT."""
     pat = decrypt_token(encrypted_pat)
