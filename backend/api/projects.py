@@ -39,6 +39,14 @@ def list_projects(db: Session = Depends(get_db)):
     return db.query(Project).all()
 
 
+@router.get("/{project_id}", response_model=ProjectResponse)
+def get_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
