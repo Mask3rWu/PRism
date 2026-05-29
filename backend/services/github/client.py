@@ -40,6 +40,38 @@ async def fetch_pulls(owner: str, repo: str, encrypted_pat: str, page: int = 1, 
     return None
 
 
+async def fetch_pr_detail(owner: str, repo: str, pr_number: int, encrypted_pat: str) -> dict | None:
+    """Fetch a single PR's details (JSON) from GitHub."""
+    pat = decrypt_token(encrypted_pat)
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.json()
+        except httpx.RequestError:
+            pass
+    return None
+
+
+async def fetch_pr_diff(owner: str, repo: str, pr_number: int, encrypted_pat: str) -> str | None:
+    """Fetch a single PR's raw diff from GitHub."""
+    pat = decrypt_token(encrypted_pat)
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3.diff"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.text
+        except httpx.RequestError:
+            pass
+    return None
+
+
 async def get_repo(owner: str, repo: str, encrypted_pat: str) -> dict | None:
     """Fetch repository info from GitHub using a stored encrypted PAT."""
     pat = decrypt_token(encrypted_pat)

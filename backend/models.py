@@ -47,6 +47,7 @@ class Review(Base):
     risk_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     issue_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     test_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    diff_content: Mapped[str | None] = mapped_column(Text, default=None)
     comment_content: Mapped[str | None] = mapped_column(Text, default=None)
     writeback_error: Mapped[str | None] = mapped_column(Text, default=None)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
