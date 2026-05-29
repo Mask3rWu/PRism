@@ -9,6 +9,12 @@
 - Import all ORM model modules in `main.py` before `lifespan` so `Base.metadata` sees all tables at `create_all` time
 - New API routers go in `backend/api/<feature>.py`, register in `main.py` with `app.include_router()`, use `prefix="/api/<resource>"` and `tags=["<resource>"]`
 - Use `joinedload()` for eager-loading SQLAlchemy relationships when the response schema needs them — avoids lazy-load DetachedInstanceError
+- LangGraph TypedDict state: use `NotRequired` for optional fields and annotate at construction site to avoid `dict[str, object]` inference
+- LLM calls via httpx: async POST to `{endpoint}/chat/completions` with Bearer token, parse `choices[0].message.content`
+- Prompt templates in .md files: load at runtime with `open()`, substitute placeholders with `str.replace()`
+- Agent nodes manage their own DB sessions via `SessionLocal()` — not via FastAPI's `Depends(get_db)`
+- Graph nodes return `dict` (partial state updates) — return `{"summary_result": result}` not the full state
+- `CompiledStateGraph` is the return type of `.compile()`, not `StateGraph`
 
 ---
 
@@ -116,3 +122,19 @@
   - Endpoint order in FastAPI matters — `/{review_id}/status` must be defined before `/{review_id}` to avoid path capture
 ---
 
+## 2026/05/29 - US-008
+- Implemented LangGraph Summary Agent node: LLM-powered PR diff summarization
+- Created backend/core/llm_client.py: async LLM client using httpx for OpenAI-compatible API
+- Created backend/agents/ package: states.py (ReviewState TypedDict), review_graph.py (START→summary→END DAG), nodes/summary.py (Summary Agent node)
+- Created backend/agents/prompts/summary.md: prompt template with {project_description} and {pr_diff} placeholders
+- Extended backend/services/review/service.py: graph invocation after diff fetch, succeeded/failed status handling
+- PR: #6 (branch: feat/US-008-summary-agent-node)
+- **Learnings for future iterations:**
+  - LangGraph nodes manage their own DB sessions via SessionLocal() — no FastAPI Depends in graph context
+  - Use NotRequired for optional TypedDict fields in state schema
+  - Graph node functions return partial state dict, not full state
+  - `llm_call_json()` strips markdown code fences from LLM responses before JSON parsing
+  - Prompt templates use str.replace() for placeholder substitution (keeps it simple)
+  - Future nodes (US-009~US-012) should follow the same pattern: own DB session, record AgentTiming, update review stage
+  - The graph is compiled once at module load time — shared across all requests
+---
