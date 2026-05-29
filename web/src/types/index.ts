@@ -30,3 +30,81 @@ export interface PullRequestItem {
   base_branch: string;
   review_status: "none" | "queued" | "running" | "succeeded" | "failed";
 }
+
+export interface AgentTimingItem {
+  agent_name: string;
+  start_time: string;
+  end_time: string | null;
+}
+
+export interface ReviewStatusResponse {
+  id: number;
+  status: string;
+  stage: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  agent_timings: AgentTimingItem[];
+}
+
+export interface SummaryResult {
+  overview: string;
+  scope: string[];
+  key_changes: string[];
+  files_changed: string[];
+}
+
+export interface RiskItem {
+  level: string;
+  reason: string;
+  file: string;
+  code_segment: string;
+  suggestion?: string;
+}
+
+export interface RiskResult {
+  risk_items: RiskItem[];
+  overall_risk: string;
+}
+
+export interface IssueItem {
+  severity: string;
+  description: string;
+  file: string;
+  line: number;
+  suggestion?: string;
+}
+
+export interface IssueResult {
+  issues: IssueItem[];
+}
+
+export interface TestSuggestion {
+  target: string;
+  scenario: string;
+  priority: string;
+}
+
+export interface TestResult {
+  suggested_tests: TestSuggestion[];
+}
+
+export interface ReviewDetail {
+  id: number;
+  project_id: number;
+  pr_number: number;
+  pr_title: string;
+  status: string;
+  stage: string | null;
+  error_message: string | null;
+  summary_result: SummaryResult | null;
+  risk_result: RiskResult | null;
+  issue_result: IssueResult | null;
+  test_result: TestResult | null;
+  comment_content: string | null;
+  writeback_error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  agent_timings: AgentTimingItem[];
+}
