@@ -9,3 +9,4 @@ class ReviewState(TypedDict, total=False):
     risk_result: NotRequired[dict | None]
     issue_result: NotRequired[dict | None]
     test_result: NotRequired[dict | None]
+    comment_result: NotRequired[dict | None]
