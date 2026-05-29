@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 
 from backend.agents.review_graph import review_graph
 from backend.agents.states import ReviewState
+from backend.core.config import settings
 from backend.core.database import SessionLocal
 from backend.models import Review, ReviewStatus
-from backend.services.github.client import fetch_pr_diff
+from backend.services.github.client import fetch_pr_diff, writeback_comment
 
 _review_semaphore = asyncio.Semaphore(3)
 
@@ -63,5 +64,20 @@ async def _run_review_background(review_id: int) -> None:
             review.status = ReviewStatus.succeeded
             review.completed_at = datetime.now(timezone.utc)
             db.commit()
+
+            if review.comment_content:
+                review_link = f"{settings.FRONTEND_URL}/reviews/{review_id}"
+                full_comment = review.comment_content.replace(
+                    "https://github.com", review_link
+                )
+                ok = await writeback_comment(
+                    project.repo_owner, project.repo_name,
+                    review.pr_number, project.encrypted_pat,
+                    full_comment,
+                )
+                if not ok:
+                    db.refresh(review)
+                    review.writeback_error = "Failed to post comment to GitHub"
+                    db.commit()
     finally:
         db.close()
