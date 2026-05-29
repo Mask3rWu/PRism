@@ -7,6 +7,8 @@
 - Run mypy with `--explicit-package-bases` when checking code under `backend/` as a package
 - Do not install `sqlalchemy2-stubs` — conflicts with SQLAlchemy 2.0's built-in typing
 - Import all ORM model modules in `main.py` before `lifespan` so `Base.metadata` sees all tables at `create_all` time
+- New API routers go in `backend/api/<feature>.py`, register in `main.py` with `app.include_router()`, use `prefix="/api/<resource>"` and `tags=["<resource>"]`
+- Use `joinedload()` for eager-loading SQLAlchemy relationships when the response schema needs them — avoids lazy-load DetachedInstanceError
 
 ---
 
@@ -95,5 +97,22 @@
   - The `from_attributes=True` ConfigDict on Pydantic models serializes SQLAlchemy Enum fields as their string values
   - GitHub PR diff endpoint: same URL as PR detail, but with `Accept: application/vnd.github.v3.diff` header
   - Future agent graph stories (US-008+) should extend `_run_review_background` rather than replacing it
+---
+
+## 2026/05/29 - US-007
+- Implemented Review status and detail query endpoints:
+  - GET /api/reviews/{id}/status — returns status, stage, error_message, agent timings
+  - GET /api/reviews/{id}/status — returns full review result (summary, risk, issues, tests, comment) + agent_timings
+- Created backend/api/reviews.py with APIRouter(prefix="/api/reviews", tags=["reviews"])
+- Added schemas: AgentTimingItem, ReviewStatusResponse, ReviewDetailResponse (extends ReviewResponse)
+- Registered reviews router in backend/main.py
+- Files changed: backend/api/reviews.py (new), backend/schemas/review.py, backend/main.py
+- PR: #5 (branch: feat/US-007-review-status-endpoints)
+- **Learnings for future iterations:**
+  - SQLite DateTime columns require Python datetime objects, not ISO strings
+  - FastAPI TestClient needs context manager usage (`with TestClient(app) as client:`) to trigger lifespan
+  - Deleting SQLite DB file and restarting re-creates tables via `Base.metadata.create_all` in lifespan
+  - `ReviewDetailResponse(ReviewResponse)` inherits all fields from ReviewResponse and adds `agent_timings`
+  - Endpoint order in FastAPI matters — `/{review_id}/status` must be defined before `/{review_id}` to avoid path capture
 ---
 
