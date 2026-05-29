@@ -20,8 +20,12 @@
   - sqlalchemy2-stubs conflicts with SQLAlchemy 2.0 built-in typing — don't install it
   - Always import models before lifespan so Base.metadata knows about all table definitions
   - The scripts/ directory is gitignored; PRD and Ralph progress there are local-only
+  - GitHub PR list API: GET /repos/{owner}/{repo}/pulls?state=open, response includes `number`, `title`, `user.login`, `created_at`, `head.ref`, `base.ref`
+  - PR review status enrichment pattern: fetch PRs from GitHub, extract numbers, batch-query local Review table with `.in_()`, build a dict map, merge into response
+  - When adding an API route under an existing path prefix, extend the same router file rather than creating a new one
 
 ---
+
 
 ## 2026/05/29 19:45 - US-004
 - Created Project CRUD API endpoints: POST/GET/PUT/DELETE /api/projects
@@ -61,3 +65,17 @@
   - Existing .env uses `DEFAULT_LLM_` prefix for LLM config vars
   - Added `__pycache__/` and `*.db` to .gitignore
 ---
+
+## 2026/05/29 20:00 - US-005
+- Created GET /api/projects/{id}/pulls endpoint: fetch open PRs from GitHub, merge with local review status
+- Added fetch_pulls() to backend/services/github/client.py
+- Created backend/schemas/pull_request.py with PullRequestItem schema
+- Extended backend/api/projects.py router with list_pull_requests endpoint
+- PR: #3 (branch: feat/US-005-pr-list-endpoint)
+- **Learnings for future iterations:**
+  - GitHub PR list API returns `number` (not `pr_number`), `user.login` (nested), `head.ref`/`base.ref` for branches
+  - Batch query local Review table with `.in_(pr_numbers)` to enrich GitHub PRs with review status
+  - For endpoints under an existing path prefix, extend the same router file rather than creating a new module
+  - `httpx.Client.get(params=...)` needs explicit type annotation `dict[str, str | int]` when mixing str and int values
+---
+
