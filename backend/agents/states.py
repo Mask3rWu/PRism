@@ -6,3 +6,4 @@ class ReviewState(TypedDict, total=False):
     project_description: NotRequired[str]
     pr_diff: NotRequired[str]
     summary_result: NotRequired[dict | None]
+    risk_result: NotRequired[dict | None]
