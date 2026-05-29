@@ -150,3 +150,14 @@
   - risk_analysis node passes summary_result as JSON string into the prompt for additional context
   - The review_graph.py mypy return-type warning is pre-existing (LangGraph generic inference limitation) — safe to ignore
 ---
+
+## 2026/05/29 - US-010
+- Implemented Issue Detection Agent node: LLM-powered bug detection from PR diff
+- Created backend/agents/prompts/issue_detection.md: prompt template covering 11 issue categories (null refs, unhandled exceptions, SQL injection, race conditions, missing await, resource leaks, error propagation, type mismatches, off-by-one, logic errors, hardcoded secrets)
+- Created backend/agents/nodes/issue_detection.py: follows same pattern as summary/risk_analysis nodes (own SessionLocal(), AgentTiming recording, stage update)
+- Extended ReviewState with issue_result field; wired issue_detection sequentially after risk_analysis in review_graph.py
+- PR: #8 (branch: feat/US-010-issue-detection-node)
+- **Learnings for future iterations:**
+  - Agent nodes are fully templated — copy risk_analysis.py, rename function, change stage strings and prompt path
+  - Adding a new agent node requires touching exactly 4 files: prompt .md, node .py, states.py, review_graph.py
+---
