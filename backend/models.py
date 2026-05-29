@@ -1,0 +1,69 @@
+import enum
+from datetime import datetime, timezone
+
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from backend.core.database import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
+
+class ReviewStatus(str, enum.Enum):
+    queued = "queued"
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    repo_owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    repo_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    encrypted_pat: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    reviews: Mapped[list["Review"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(Integer, ForeignKey("projects.id"), nullable=False)
+    pr_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    pr_title: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus), default=ReviewStatus.queued, nullable=False)
+    stage: Mapped[str | None] = mapped_column(String(64), default=None)
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    summary_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    risk_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    issue_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    test_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    comment_content: Mapped[str | None] = mapped_column(Text, default=None)
+    writeback_error: Mapped[str | None] = mapped_column(Text, default=None)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+
+    project: Mapped["Project"] = relationship(back_populates="reviews")
+    agent_timings: Mapped[list["AgentTiming"]] = relationship(back_populates="review", cascade="all, delete-orphan")
+
+
+class AgentTiming(Base):
+    __tablename__ = "agent_timings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    review_id: Mapped[int] = mapped_column(Integer, ForeignKey("reviews.id"), nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    start_time: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+
+    review: Mapped["Review"] = relationship(back_populates="agent_timings")
