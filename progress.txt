@@ -17,6 +17,8 @@
 - `CompiledStateGraph` is the return type of `.compile()`, not `StateGraph`
 - LangGraph parallel fan-out/fan-in: fan-out by adding edges from one node to multiple targets; fan-in by adding edges from multiple nodes to one target (LangGraph waits for all to complete before invoking the target)
 - New agent nodes touch exactly 4 files: prompt .md, node .py, states.py, review_graph.py — follow the test_suggestions.py template
+- Use `is_seeded` boolean flag on entities to differentiate mock/local data from real external API data — the API layer checks the flag and skips external calls for seeded entities
+- When resolving mypy cross-branch variable assignments in if/else, use separate intermediate variable names to avoid type narrowing conflicts (e.g., `github_prs` → narrow via `is None` check → assign to `prs`)
 
 ---
 
@@ -201,4 +203,20 @@
   - Writeback fails gracefully: don't fail the review, just set writeback_error so the user can retry
   - Async endpoints in FastAPI that use SessionLocal() should manually call db.close() in a finally block
   - The comment_compose prompt uses `https://github.com` as a placeholder link — replace with actual platform URL before posting
+---
+
+## 2026/05/29 - US-014
+- Implemented seed database population for frontend development without real GitHub credentials
+- Created backend/seed.py: SEED_PR_LISTS dict with mock PRs, seed_database() populating 2 projects + 7 PR reviews
+- Added is_seeded boolean column to Project model to differentiate seeded vs real projects
+- Modified PR list endpoint to return seed PR data for is_seeded projects (with pagination), skipping GitHub API calls
+- seed_database() runs in lifespan, is idempotent (skips if DB already has data)
+- Seed data: Project 1 has 5 PRs (3 succeeded with full data, 1 queued, 1 failed); Project 2 has 2 PRs with no reviews
+- Files changed: backend/seed.py (new), backend/models.py, backend/main.py, backend/api/projects.py
+- PR: #12 (branch: feat/US-014-seed-data)
+- **Learnings for future iterations:**
+  - FERNET_KEY may be empty in .env — wrap encrypt_token() in try/except for seed data that uses fake PATs
+  - Cross-branch mypy assignment issue: when if/else both assign to the same variable, mypy narrows from the first branch. Fix: use intermediate variable in the else branch, narrow with `is None` check, then assign to the target variable
+  - The `is_seeded` flag pattern: add a boolean column to entities, check in the API layer to skip external calls for mock data
+  - Seed data module import in main.py must come before lifespan() usage
 ---
