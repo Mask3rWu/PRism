@@ -256,6 +256,19 @@
   - The page.tsx is a Server Component by default; "use client" makes it a Client Component
   - Tailwind v4 dark mode uses `dark:` prefix classes — no darkMode config needed
   - Component structure: keep data fetching in Server Components, interactivity in Client Components
-- Manual browser verification needed (no browser tools available)
+
+## 2026/05/29 - US-017
+- Extended AddProjectModal to support both add and edit modes via optional `project` prop
+- Added edit button (pencil icon) to ProjectCard, visible on hover
+- Edit mode: project name/repo shown as read-only, description pre-filled, PAT shows placeholder "Leave blank to keep current"
+- Edit mode calls PUT /api/projects/{id}, only sends changed fields
+- ProjectList manages `editingProject` state for add/edit modal coordination
+- Added ProjectUpdatePayload type to types/index.ts
+- Files changed: web/src/components/AddProjectModal.tsx, web/src/components/ProjectCard.tsx, web/src/components/ProjectList.tsx, web/src/types/index.ts
+- PR: #15 (branch: feat/US-017-add-edit-project-form)
+- **Learnings for future iterations:**
+  - ProjectCard link structure: when adding overlay buttons to a card that's also a link, wrap in a container div and put the Link inside to avoid nested interactive elements
+  - Form handling in React 19: use `useRef` for form reference instead of document.getElementById, and `defaultValue` for pre-filled controlled fields
+  - PUT endpoint takes partial updates (description, pat only) — no need to send the full project
 ---
 
