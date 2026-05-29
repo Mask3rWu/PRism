@@ -3,6 +3,26 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class AgentTimingItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    agent_name: str
+    start_time: datetime
+    end_time: datetime | None = None
+
+
+class ReviewStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: str
+    stage: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    agent_timings: list[AgentTimingItem] = []
+
+
 class ReviewResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -22,3 +42,7 @@ class ReviewResponse(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime
+
+
+class ReviewDetailResponse(ReviewResponse):
+    agent_timings: list[AgentTimingItem] = []
