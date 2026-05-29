@@ -8,6 +8,7 @@ import type { Project } from "@/types";
 export default function ProjectList({ initialProjects }: { initialProjects: Project[] }) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [fetchError, setFetchError] = useState("");
 
   const handleRefresh = async () => {
@@ -21,6 +22,22 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
     }
   };
 
+  const openAddModal = () => {
+    setEditingProject(null);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (project: Project) => {
+    setEditingProject(project);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingProject(null);
+    handleRefresh();
+  };
+
   const hasProjects = projects.length > 0;
 
   return (
@@ -31,7 +48,7 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
         </h1>
         <button
           type="button"
-          onClick={() => setModalOpen(true)}
+          onClick={openAddModal}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
         >
           Add Project
@@ -49,7 +66,7 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
           </p>
           <button
             type="button"
-            onClick={() => setModalOpen(true)}
+            onClick={openAddModal}
             className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
           >
             Add your first project
@@ -60,17 +77,19 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
       {hasProjects && (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onEdit={openEditModal}
+            />
           ))}
         </div>
       )}
 
       <AddProjectModal
         open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          handleRefresh();
-        }}
+        onClose={closeModal}
+        project={editingProject}
       />
     </div>
   );

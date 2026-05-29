@@ -1,18 +1,29 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ProjectCreatePayload } from "@/types";
+import type { Project, ProjectCreatePayload, ProjectUpdatePayload } from "@/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  project?: Project | null;
 }
 
-export default function AddProjectModal({ open, onClose }: Props) {
+export default function AddProjectModal({ open, onClose, project }: Props) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const isEdit = !!project;
+
+  useEffect(() => {
+    if (!open) {
+      setError("");
+      setLoading(false);
+    }
+  }, [open]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -22,28 +33,60 @@ export default function AddProjectModal({ open, onClose }: Props) {
 
       const form = e.currentTarget;
       const data = new FormData(form);
-      const payload: ProjectCreatePayload = {
-        name: data.get("name") as string,
-        repo_owner: data.get("repo_owner") as string,
-        repo_name: data.get("repo_name") as string,
-        pat: data.get("pat") as string,
-        description: data.get("description") as string,
-      };
 
       try {
-        const res = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        if (isEdit && project) {
+          const payload: ProjectUpdatePayload = {};
+          const desc = (data.get("description") as string).trim();
+          const pat = (data.get("pat") as string).trim();
+          if (desc !== (project.description ?? "")) {
+            payload.description = desc;
+          }
+          if (pat) {
+            payload.pat = pat;
+          }
+          if (!payload.description && !payload.pat) {
+            setError("No changes to save");
+            setLoading(false);
+            return;
+          }
 
-        if (!res.ok) {
-          const body = await res.json();
-          setError(body.detail || "Failed to create project");
+          const res = await fetch(`/api/projects/${project.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const body = await res.json();
+            setError(body.detail || "Failed to update project");
+          } else {
+            onClose();
+            router.refresh();
+          }
         } else {
-          form.reset();
-          onClose();
-          router.refresh();
+          const payload: ProjectCreatePayload = {
+            name: data.get("name") as string,
+            repo_owner: data.get("repo_owner") as string,
+            repo_name: data.get("repo_name") as string,
+            pat: data.get("pat") as string,
+            description: data.get("description") as string,
+          };
+
+          const res = await fetch("/api/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const body = await res.json();
+            setError(body.detail || "Failed to create project");
+          } else {
+            form.reset();
+            onClose();
+            router.refresh();
+          }
         }
       } catch {
         setError("Network error. Is the backend running?");
@@ -51,7 +94,7 @@ export default function AddProjectModal({ open, onClose }: Props) {
         setLoading(false);
       }
     },
-    [onClose, router],
+    [isEdit, onClose, project, router],
   );
 
   if (!open) return null;
@@ -67,67 +110,113 @@ export default function AddProjectModal({ open, onClose }: Props) {
           ✕
         </button>
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Add Project
+          {isEdit ? "Edit Project" : "Add Project"}
         </h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Project Name
-            </label>
-            <input
-              name="name"
-              required
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="My Project"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Owner
-              </label>
-              <input
-                name="repo_owner"
-                required
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                placeholder="owner"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Repo
-              </label>
-              <input
-                name="repo_name"
-                required
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                placeholder="repo"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              GitHub PAT
-            </label>
-            <input
-              name="pat"
-              type="password"
-              required
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="ghp_..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Description
-            </label>
-            <textarea
-              name="description"
-              rows={2}
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="Brief project description (optional)"
-            />
-          </div>
+        <form ref={formRef} onSubmit={handleSubmit} className="mt-4 space-y-3">
+          {isEdit ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Project Name
+                </label>
+                <p className="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
+                  {project!.name}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Repository
+                </label>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  {project!.repo_owner}/{project!.repo_name}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  GitHub PAT
+                </label>
+                <input
+                  name="pat"
+                  type="password"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="Leave blank to keep current"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  rows={2}
+                  defaultValue={project!.description}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="Brief project description (optional)"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Project Name
+                </label>
+                <input
+                  name="name"
+                  required
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="My Project"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Owner
+                  </label>
+                  <input
+                    name="repo_owner"
+                    required
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    placeholder="owner"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Repo
+                  </label>
+                  <input
+                    name="repo_name"
+                    required
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    placeholder="repo"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  GitHub PAT
+                </label>
+                <input
+                  name="pat"
+                  type="password"
+                  required
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="ghp_..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  rows={2}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="Brief project description (optional)"
+                />
+              </div>
+            </>
+          )}
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
@@ -136,7 +225,13 @@ export default function AddProjectModal({ open, onClose }: Props) {
             disabled={loading}
             className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Creating..." : "Create Project"}
+            {loading
+              ? isEdit
+                ? "Saving..."
+                : "Creating..."
+              : isEdit
+                ? "Save Changes"
+                : "Create Project"}
           </button>
         </form>
       </div>
