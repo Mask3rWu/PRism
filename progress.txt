@@ -1,0 +1,17 @@
+## Codebase Patterns
+- Backend uses FastAPI with `lifespan` pattern for DB table creation on startup
+- Config uses pydantic-settings `alias` (not `validation_alias`) for env var name mapping — use `populate_by_name=True` to allow both names
+- Pass `connect_args={"check_same_thread": False}` for SQLite with FastAPI's async/thread-pool model
+- Run backend from project root: `python -m uvicorn backend.main:app` (env_file path is relative to CWD)
+
+---
+## 2026/05/29 18:15 - US-001
+- Backend project scaffolding: FastAPI app, SQLite + SQLAlchemy setup, pydantic-settings config
+- Files changed: backend/main.py, backend/core/__init__.py, backend/core/config.py, backend/core/database.py, backend/requirements.txt, .gitignore
+- PR: N/A (no remote configured)
+- **Learnings for future iterations:**
+  - pydantic-settings `validation_alias` does not work for env_file loading — use `alias` on Field instead
+  - The .env file path in SettingsConfigDict is relative to CWD when running the app
+  - Existing .env uses `DEFAULT_LLM_` prefix for LLM config vars
+  - Added `__pycache__/` and `*.db` to .gitignore
+---
