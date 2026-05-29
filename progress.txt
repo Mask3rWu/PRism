@@ -161,3 +161,14 @@
   - Agent nodes are fully templated — copy risk_analysis.py, rename function, change stage strings and prompt path
   - Adding a new agent node requires touching exactly 4 files: prompt .md, node .py, states.py, review_graph.py
 ---
+
+## 2026/05/29 - US-011
+- Implemented Test Suggestions Agent node: LLM-powered test case generation from PR diff
+- Created backend/agents/prompts/test_suggestions.md: prompt template covering unit tests, integration tests, regression tests, boundary conditions, concurrency, security, and database testing scenarios
+- Created backend/agents/nodes/test_suggestions.py: follows same pattern as summary/risk_analysis/issue_detection (own SessionLocal(), AgentTiming recording, stage update)
+- Extended ReviewState with test_result field; wired test_suggestions sequentially after issue_detection in review_graph.py
+- PR: #9 (branch: feat/US-011-test-suggestions-node)
+- **Learnings for future iterations:**
+  - Agent nodes are now fully templated — the 5th node (test_suggestions) followed the exact same 4-file touch pattern
+  - US-012 will refactor the sequential graph into parallel execution (summary → [risk, issues, tests] concurrently)
+---
