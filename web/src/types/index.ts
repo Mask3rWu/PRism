@@ -15,3 +15,8 @@ export interface ProjectCreatePayload {
   pat: string;
   description: string;
 }
+
+export interface ProjectUpdatePayload {
+  description?: string;
+  pat?: string;
+}
