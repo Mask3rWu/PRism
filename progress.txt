@@ -3,8 +3,26 @@
 - Config uses pydantic-settings `alias` (not `validation_alias`) for env var name mapping — use `populate_by_name=True` to allow both names
 - Pass `connect_args={"check_same_thread": False}` for SQLite with FastAPI's async/thread-pool model
 - Run backend from project root: `python -m uvicorn backend.main:app` (env_file path is relative to CWD)
+- SQLAlchemy 2.0 ORM models: use `Mapped[]` + `mapped_column()`, `relationship()`, `back_populates` (not backref)
+- Run mypy with `--explicit-package-bases` when checking code under `backend/` as a package
+- Do not install `sqlalchemy2-stubs` — conflicts with SQLAlchemy 2.0's built-in typing
+- Import all ORM model modules in `main.py` before `lifespan` so `Base.metadata` sees all tables at `create_all` time
 
 ---
+
+## 2026/05/29 19:00 - US-002
+- Created database models: Project, Review, AgentTiming in backend/models.py
+- Updated backend/main.py to import models so tables are created on startup
+- Recovered US-001 .py source files (config.py, database.py, main.py) which were never committed
+- PR: N/A (no remote configured)
+- **Learnings for future iterations:**
+  - Use `--explicit-package-bases` with mypy when the backend package is within the mypy check path
+  - sqlalchemy2-stubs conflicts with SQLAlchemy 2.0 built-in typing — don't install it
+  - Always import models before lifespan so Base.metadata knows about all table definitions
+  - The scripts/ directory is gitignored; PRD and Ralph progress there are local-only
+
+---
+
 ## 2026/05/29 18:15 - US-001
 - Backend project scaffolding: FastAPI app, SQLite + SQLAlchemy setup, pydantic-settings config
 - Files changed: backend/main.py, backend/core/__init__.py, backend/core/config.py, backend/core/database.py, backend/requirements.txt, .gitignore
