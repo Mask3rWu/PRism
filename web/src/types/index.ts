@@ -30,3 +30,13 @@ export interface PullRequestItem {
   base_branch: string;
   review_status: "none" | "queued" | "running" | "succeeded" | "failed";
 }
+
+export interface ReviewStatusResponse {
+  id: number;
+  status: string;
+  stage: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  agent_timings: { agent_name: string; start_time: string; end_time: string | null }[];
+}

@@ -257,6 +257,21 @@
   - Tailwind v4 dark mode uses `dark:` prefix classes — no darkMode config needed
   - Component structure: keep data fetching in Server Components, interactivity in Client Components
 
+## 2026/05/29 - US-018
+- Implemented project detail page with PR list: /projects/[id] shows project info + open PRs table
+- Created PRList client component with review trigger, pagination, and status badges
+- Added GET /api/projects/{id} backend endpoint (was missing)
+- Added PullRequestItem type to frontend types
+- Files changed: backend/api/projects.py, web/src/app/projects/[id]/page.tsx, web/src/components/PRList.tsx (new), web/src/types/index.ts
+- PR: #16 (branch: feat/US-018-project-detail-pr-list)
+- **Learnings for future iterations:**
+  - Server Component fetches project + PRs in parallel via Promise.all for performance
+  - PRList is a "use client" component managing pagination and review trigger interactivity
+  - Trigger button disables for queued/running reviews; on successful trigger, locally updates state
+  - FastAPI endpoints with different segment counts (/{id} vs /{id}/pulls) don't conflict — more segments = more specific match
+  - Next.js 16 dynamic route params are Promise<{ id: string }> — must await before use
+---
+
 ## 2026/05/29 - US-017
 - Extended AddProjectModal to support both add and edit modes via optional `project` prop
 - Added edit button (pencil icon) to ProjectCard, visible on hover

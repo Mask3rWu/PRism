@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { Project, PullRequestItem } from "@/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Project, PullRequestItem, ReviewStatusResponse } from "@/types";
 
 interface Props {
   project: Project;
@@ -36,6 +36,22 @@ const STATUS_CONFIG: Record<
   },
 };
 
+const STAGE_LABELS: Record<string, string> = {
+  fetching_diff: "Fetching Diff",
+  diff_fetched: "Diff Fetched",
+  summarizing: "Summarizing",
+  summarized: "Summarized",
+  analyzing_risks: "Analyzing Risks",
+  risks_analyzed: "Risks Analyzed",
+  detecting_issues: "Detecting Issues",
+  issues_detected: "Issues Detected",
+  suggesting_tests: "Generating Tests",
+  tests_suggested: "Tests Generated",
+  composing_comment: "Composing Comment",
+  comment_composed: "Comment Composed",
+  writing_back: "Writing to GitHub",
+};
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", {
     year: "numeric",
@@ -44,12 +60,90 @@ function formatDate(dateStr: string) {
   });
 }
 
+function stageLabel(stage: string | null): string {
+  if (!stage) return "";
+  return STAGE_LABELS[stage] || stage.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function PRList({ project, initialPRs, initialPage, perPage }: Props) {
   const [prs, setPRs] = useState<PullRequestItem[]>(initialPRs);
   const [page, setPage] = useState(initialPage);
   const [loadingPage, setLoadingPage] = useState(false);
   const [triggeringPRs, setTriggeringPRs] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [reviewStages, setReviewStages] = useState<Record<number, string | null>>({});
+  const [reviewErrors, setReviewErrors] = useState<Record<number, string | null>>({});
+
+  const pollingRef = useRef<Record<number, number>>({});
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+
+    intervalRef.current = setInterval(async () => {
+      const entries = Object.entries(pollingRef.current);
+      if (entries.length === 0) {
+        stopPolling();
+        return;
+      }
+
+      for (const [prStr, reviewId] of entries) {
+        const prNumber = Number(prStr);
+        try {
+          const res = await fetch(`/api/reviews/${reviewId}/status`);
+          if (!res.ok) continue;
+          const data: ReviewStatusResponse = await res.json();
+
+          setReviewStages((prev) => ({ ...prev, [prNumber]: data.stage }));
+
+          if (data.status === "succeeded" || data.status === "failed") {
+            const next = { ...pollingRef.current };
+            delete next[prNumber];
+            pollingRef.current = next;
+
+            const newStatus = data.status as PullRequestItem["review_status"];
+            setPRs((prev) =>
+              prev.map((pr) =>
+                pr.pr_number === prNumber
+                  ? { ...pr, review_status: newStatus }
+                  : pr
+              )
+            );
+
+            if (data.status === "failed") {
+              setReviewErrors((prev) => ({
+                ...prev,
+                [prNumber]: data.error_message || "Unknown error",
+              }));
+            } else {
+              setReviewErrors((prev) => {
+                const next = { ...prev };
+                delete next[prNumber];
+                return next;
+              });
+            }
+
+            if (Object.keys(next).length === 0) {
+              stopPolling();
+            }
+          }
+        } catch {
+          // ignore polling errors
+        }
+      }
+    }, 3000);
+  }, [stopPolling]);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
 
   async function loadPage(newPage: number) {
     setLoadingPage(true);
@@ -85,11 +179,19 @@ export default function PRList({ project, initialPRs, initialPage, perPage }: Pr
         setError(data.detail || "Failed to trigger review");
         return;
       }
+      const data = await res.json();
       setPRs((prev) =>
         prev.map((pr) =>
           pr.pr_number === prNumber ? { ...pr, review_status: "queued" } : pr
         )
       );
+      setReviewErrors((prev) => {
+        const next = { ...prev };
+        delete next[prNumber];
+        return next;
+      });
+      pollingRef.current = { ...pollingRef.current, [prNumber]: data.id };
+      startPolling();
     } catch {
       setError("Failed to trigger review");
     } finally {
@@ -146,6 +248,8 @@ export default function PRList({ project, initialPRs, initialPage, perPage }: Pr
                 const status = STATUS_CONFIG[pr.review_status];
                 const active = isReviewActive(pr.review_status);
                 const triggering = triggeringPRs.has(pr.pr_number);
+                const stage = reviewStages[pr.pr_number];
+                const reviewError = reviewErrors[pr.pr_number];
 
                 return (
                   <tr
@@ -176,11 +280,23 @@ export default function PRList({ project, initialPRs, initialPage, perPage }: Pr
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}
-                      >
-                        {status.label}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium w-fit ${status.className}`}
+                        >
+                          {status.label}
+                        </span>
+                        {active && stage && (
+                          <span className="text-xs text-zinc-400 dark:text-zinc-500 animate-pulse">
+                            {stageLabel(stage)}
+                          </span>
+                        )}
+                        {reviewError && (
+                          <span className="text-xs text-red-500 dark:text-red-400">
+                            {reviewError}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -193,6 +309,8 @@ export default function PRList({ project, initialPRs, initialPage, perPage }: Pr
                           "Starting..."
                         ) : active ? (
                           "In Progress"
+                        ) : pr.review_status === "failed" ? (
+                          "Retry"
                         ) : (
                           "Trigger Review"
                         )}
