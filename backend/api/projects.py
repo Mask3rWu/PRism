@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
 from backend.core.security import encrypt_token
-from backend.models import Project, Review
+from backend.models import Project, Review, ReviewStatus
 from backend.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.schemas.pull_request import PullRequestItem
-from backend.services.github.client import fetch_pulls, validate_pat
+from backend.schemas.review import ReviewResponse
+from backend.services.github.client import fetch_pr_detail, fetch_pulls, validate_pat
+from backend.services.review.service import _run_review_background
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -105,3 +107,44 @@ async def list_pull_requests(
         ))
 
     return result
+
+
+@router.post("/{project_id}/pulls/{pr_number}/review", response_model=ReviewResponse, status_code=202)
+async def trigger_review(
+    project_id: int,
+    pr_number: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    existing = db.query(Review).filter(
+        Review.project_id == project_id,
+        Review.pr_number == pr_number,
+        Review.status.in_([ReviewStatus.queued, ReviewStatus.running]),
+    ).first()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="A review is already in progress for this PR")
+
+    pr_detail = await fetch_pr_detail(
+        project.repo_owner, project.repo_name,
+        pr_number, project.encrypted_pat,
+    )
+    if pr_detail is None:
+        raise HTTPException(status_code=502, detail="Failed to fetch PR details from GitHub")
+
+    review = Review(
+        project_id=project_id,
+        pr_number=pr_number,
+        pr_title=pr_detail["title"],
+        status=ReviewStatus.queued,
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+
+    background_tasks.add_task(_run_review_background, review.id)
+
+    return review
