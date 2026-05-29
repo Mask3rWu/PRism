@@ -23,6 +23,17 @@
 
 ---
 
+## 2026/05/29 19:30 - US-003
+- Created backend/core/security.py with encrypt_token() and decrypt_token() using Fernet
+- Created backend/requirements.txt with all project dependencies (was missing, needed for US-001)
+- PR: N/A (no remote configured)
+- **Learnings for future iterations:**
+  - cryptography library's Fernet.generate_key() is the standard way to create keys
+  - Fernet keys are url-safe base64-encoded 32-byte values
+  - FERNET_KEY is already configured in Settings (config.py) and .env file
+---
+
+
 ## 2026/05/29 18:15 - US-001
 - Backend project scaffolding: FastAPI app, SQLite + SQLAlchemy setup, pydantic-settings config
 - Files changed: backend/main.py, backend/core/__init__.py, backend/core/config.py, backend/core/database.py, backend/requirements.txt, .gitignore
