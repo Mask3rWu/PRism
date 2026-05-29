@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime, timezone
 
+from backend.agents.review_graph import review_graph
+from backend.agents.states import ReviewState
 from backend.core.database import SessionLocal
 from backend.models import Review, ReviewStatus
 from backend.services.github.client import fetch_pr_diff
@@ -9,7 +11,7 @@ _review_semaphore = asyncio.Semaphore(3)
 
 
 async def _run_review_background(review_id: int) -> None:
-    """Background task: wait for concurrency slot, fetch PR diff, update review status."""
+    """Background task: wait for concurrency slot, fetch PR diff, run review graph."""
     db = SessionLocal()
     try:
         review = db.query(Review).filter(Review.id == review_id).first()
@@ -39,6 +41,27 @@ async def _run_review_background(review_id: int) -> None:
 
             review.diff_content = diff
             review.stage = "diff_fetched"
+            db.commit()
+
+            state: ReviewState = {
+                "project_description": project.description or "",
+                "pr_diff": diff,
+                "review_id": review_id,
+            }
+            try:
+                await review_graph.ainvoke(state)
+            except Exception as e:
+                db.refresh(review)
+                if review.status != ReviewStatus.failed:
+                    review.status = ReviewStatus.failed
+                    review.error_message = str(e)
+                    review.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+                return
+
+            db.refresh(review)
+            review.status = ReviewStatus.succeeded
+            review.completed_at = datetime.now(timezone.utc)
             db.commit()
     finally:
         db.close()
