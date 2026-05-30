@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from backend.core.database import get_db
 from backend.models import Project, Review, ReviewStatus
 from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
-from backend.schemas.pull_request import PullRequestItem
+from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem
 from backend.schemas.review import ReviewResponse
 from backend.seed import SEED_PR_LISTS
-from backend.services.github.client import fetch_pr_detail, fetch_pulls
+from backend.services.github.client import fetch_pr_detail, fetch_pulls, search_pulls
 from backend.services.review.service import _run_review_background
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -130,11 +130,42 @@ def batch_delete_projects(body: BatchDeleteRequest, db: Session = Depends(get_db
     return None
 
 
-@router.get("/{project_id}/pulls", response_model=list[PullRequestItem])
+def _pr_to_item(pr: dict, review_status_map: dict[int, str]) -> PullRequestItem:
+    labels_raw = pr.get("labels") or []
+    return PullRequestItem(
+        pr_number=pr["number"],
+        title=pr["title"],
+        author=pr["user"]["login"] if pr.get("user") else "unknown",
+        created_at=pr["created_at"],
+        updated_at=pr.get("updated_at"),
+        head_branch=pr["head"]["ref"],
+        base_branch=pr["base"]["ref"],
+        review_status=review_status_map.get(pr["number"], "none"),
+        state=pr.get("state", "open"),
+        labels=[{"name": lb["name"], "color": lb["color"]} for lb in labels_raw if lb.get("name")],
+        is_draft=pr.get("draft", False),
+        merged_at=pr.get("merged_at"),
+    )
+
+
+def _filter_by_pr_status(items: list[PullRequestItem], pr_status: list[str]) -> list[PullRequestItem]:
+    if not pr_status:
+        return items
+    return [it for it in items if it.review_status in pr_status]
+
+
+@router.get("/{project_id}/pulls", response_model=PaginatedPRResponse)
 async def list_pull_requests(
     project_id: int,
-    page: int = 1,
-    per_page: int = 30,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(30, ge=1, le=100),
+    state: str = Query("open"),
+    search: str = Query(""),
+    author: str = Query(""),
+    labels: list[str] = Query([]),
+    pr_status: list[str] = Query([]),
+    sort: str = Query("created"),
+    direction: str = Query("desc"),
     db: Session = Depends(get_db),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -142,17 +173,47 @@ async def list_pull_requests(
         raise HTTPException(status_code=404, detail="Project not found")
 
     if project.is_seeded:
-        all_prs = SEED_PR_LISTS[project.id] if project.id in SEED_PR_LISTS else []
+        all_prs = SEED_PR_LISTS.get(project.id, [])
+        # Server-side filtering for seed data
+        filtered = [pr for pr in all_prs if pr.get("state", "open") == state]
+        if search:
+            filtered = [pr for pr in filtered if search.lower() in pr["title"].lower()]
+        if author:
+            filtered = [pr for pr in filtered if (pr.get("user") or {}).get("login", "").lower() == author.lower()]
+        if labels:
+            filtered = [
+                pr for pr in filtered
+                if any(lb["name"] in labels for lb in (pr.get("labels") or []))
+            ]
+        total = len(filtered)
         start = (page - 1) * per_page
-        prs = all_prs[start : start + per_page]
+        prs = filtered[start : start + per_page]
     else:
-        github_prs = await fetch_pulls(
-            project.repo_owner, project.repo_name,
-            page=page, per_page=per_page,
-        )
-        if github_prs is None:
-            raise HTTPException(status_code=502, detail="Failed to fetch pull requests from GitHub")
-        prs = github_prs
+        has_text_filter = bool(search or author or labels)
+        if has_text_filter:
+            result = await search_pulls(
+                project.repo_owner, project.repo_name,
+                page=page, per_page=per_page,
+                state=state, search=search, author=author,
+                labels=labels if labels else None,
+                sort=sort, direction=direction,
+            )
+            if result is None:
+                raise HTTPException(status_code=502, detail="Failed to search pull requests from GitHub")
+            total = result["total_count"]
+            prs = result["items"]
+        else:
+            github_prs = await fetch_pulls(
+                project.repo_owner, project.repo_name,
+                page=page, per_page=per_page,
+                state=state, sort=sort, direction=direction,
+            )
+            if github_prs is None:
+                raise HTTPException(status_code=502, detail="Failed to fetch pull requests from GitHub")
+            total = (page - 1) * per_page + len(github_prs)
+            if len(github_prs) >= per_page:
+                total = page * per_page + 1  # indicate more pages exist
+            prs = github_prs
 
     pr_numbers = [pr["number"] for pr in prs]
     reviews = db.query(Review).filter(
@@ -161,19 +222,15 @@ async def list_pull_requests(
     ).all()
     review_status_map: dict[int, str] = {r.pr_number: r.status.value for r in reviews}
 
-    result = []
-    for pr in prs:
-        result.append(PullRequestItem(
-            pr_number=pr["number"],
-            title=pr["title"],
-            author=pr["user"]["login"] if pr.get("user") else "unknown",
-            created_at=pr["created_at"],
-            head_branch=pr["head"]["ref"],
-            base_branch=pr["base"]["ref"],
-            review_status=review_status_map.get(pr["number"], "none"),
-        ))
+    items = [_pr_to_item(pr, review_status_map) for pr in prs]
+    items = _filter_by_pr_status(items, pr_status)
 
-    return result
+    return PaginatedPRResponse(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 @router.post("/{project_id}/pulls/{pr_number}/review", response_model=ReviewResponse, status_code=202)

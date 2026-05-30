@@ -48,14 +48,31 @@ export interface GitHubRepoItem {
   permission: string;
 }
 
+export interface LabelItem {
+  name: string;
+  color: string;
+}
+
 export interface PullRequestItem {
   pr_number: number;
   title: string;
   author: string;
   created_at: string;
+  updated_at: string | null;
   head_branch: string;
   base_branch: string;
   review_status: "none" | "queued" | "running" | "succeeded" | "failed";
+  state: "open" | "closed";
+  labels: LabelItem[];
+  is_draft: boolean;
+  merged_at: string | null;
+}
+
+export interface PaginatedPRs {
+  items: PullRequestItem[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 export interface AgentTimingItem {

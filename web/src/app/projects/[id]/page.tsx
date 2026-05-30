@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Project, PullRequestItem } from "@/types";
+import type { PaginatedPRs, Project } from "@/types";
 import PRList from "@/components/PRList";
 
 const BACKEND = "http://localhost:8000";
@@ -20,16 +20,16 @@ async function getPRs(
   id: string,
   page: number,
   perPage: number
-): Promise<PullRequestItem[]> {
+): Promise<PaginatedPRs> {
   try {
     const res = await fetch(
-      `${BACKEND}/api/projects/${id}/pulls?page=${page}&per_page=${perPage}`,
+      `${BACKEND}/api/projects/${id}/pulls?page=${page}&per_page=${perPage}&state=open`,
       { cache: "no-store" }
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { items: [], total: 0, page, per_page: perPage };
     return res.json();
   } catch {
-    return [];
+    return { items: [], total: 0, page, per_page: perPage };
   }
 }
 
@@ -42,7 +42,7 @@ export default async function ProjectDetailPage({ params }: Props) {
   const page = 1;
   const perPage = 30;
 
-  const [project, prs] = await Promise.all([
+  const [project, prData] = await Promise.all([
     getProject(id),
     getPRs(id, page, perPage),
   ]);
@@ -108,12 +108,13 @@ export default async function ProjectDetailPage({ params }: Props) {
 
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Open Pull Requests
+          Pull Requests
         </h2>
         <div className="mt-3">
           <PRList
             project={project}
-            initialPRs={prs}
+            initialPRs={prData.items}
+            initialTotal={prData.total}
             initialPage={page}
             perPage={perPage}
           />
