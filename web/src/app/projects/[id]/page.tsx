@@ -26,10 +26,10 @@ async function getPRs(
       `${BACKEND}/api/projects/${id}/pulls?page=${page}&per_page=${perPage}&state=open`,
       { cache: "no-store" }
     );
-    if (!res.ok) return { items: [], total: 0, page, per_page: perPage };
+    if (!res.ok) return { items: [], total: 0, page, per_page: perPage, review_stats: null };
     return res.json();
   } catch {
-    return { items: [], total: 0, page, per_page: perPage };
+    return { items: [], total: 0, page, per_page: perPage, review_stats: null };
   }
 }
 
@@ -118,7 +118,6 @@ export default async function ProjectDetailPage({ params }: Props) {
           perPage={perPage}
           initialReviewStats={prData.review_stats}
         />
-        </div>
       </div>
     </div>
   );
