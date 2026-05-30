@@ -45,7 +45,8 @@ async def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
 @router.get("", response_model=PaginatedProjectsResponse)
 def list_projects(
     search: str = Query(default=""),
-    tag: str = Query(default=""),
+    tag: list[str] = Query(default=[]),
+    favorite: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=12, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -55,12 +56,15 @@ def list_projects(
     if search:
         query = query.filter(Project.name.ilike(f"%{search}%"))
 
+    if favorite:
+        query = query.filter(Project.is_favorite == True)
+
     query = query.order_by(Project.is_favorite.desc(), Project.updated_at.desc())
 
     projects = query.all()
 
     if tag:
-        projects = [p for p in projects if tag in json.loads(p.tags or "[]")]
+        projects = [p for p in projects if any(t in json.loads(p.tags or "[]") for t in tag)]
 
     total = len(projects)
     start = (page - 1) * per_page

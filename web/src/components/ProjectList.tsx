@@ -19,8 +19,9 @@ export default function ProjectList({
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const [selectedTag, setSelectedTag] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [page, setPage] = useState(1);
   const perPage = 12;
 
@@ -34,11 +35,12 @@ export default function ProjectList({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchProjects = useCallback(
-    async (searchTerm: string, tagFilter: string, currentPage: number) => {
+    async (searchTerm: string, tagFilters: string[], favOnly: boolean, currentPage: number) => {
       try {
         const params = new URLSearchParams();
         if (searchTerm) params.set("search", searchTerm);
-        if (tagFilter) params.set("tag", tagFilter);
+        tagFilters.forEach((t) => params.append("tag", t));
+        if (favOnly) params.set("favorite", "true");
         params.set("page", String(currentPage));
         params.set("per_page", String(perPage));
 
@@ -60,28 +62,38 @@ export default function ProjectList({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
-      fetchProjects(search, selectedTag, 1);
+      fetchProjects(search, selectedTags, favoriteOnly, 1);
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [search]);
 
-  // Tag or page change — fetch immediately
+  // Tag, favorite, or page change — fetch immediately
   useEffect(() => {
     // Skip initial render since we already have data
     const isInitial =
-      search === "" && selectedTag === "" && page === 1 &&
+      search === "" && selectedTags.length === 0 && !favoriteOnly && page === 1 &&
       projects === initialProjects;
     if (isInitial) return;
-    fetchProjects(search, selectedTag, page);
-  }, [selectedTag, page]);
+    fetchProjects(search, selectedTags, favoriteOnly, page);
+  }, [selectedTags, favoriteOnly, page]);
+
+  const allTagsCache = useRef<string[]>([]);
 
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
-    projects.forEach((p) => (p.tags ?? []).forEach((t) => tagSet.add(t)));
-    return Array.from(tagSet).sort();
-  }, [projects]);
+    const src = projects.length > 0 ? projects : [];
+    src.forEach((p) => (p.tags ?? []).forEach((t) => tagSet.add(t)));
+    // Merge cached tags so filter bar doesn't shrink when filtering
+    allTagsCache.current.forEach((t) => tagSet.add(t));
+    const result = Array.from(tagSet).sort();
+    // Update cache when no filters active (full list)
+    if (selectedTags.length === 0 && !favoriteOnly && projects.length > 0) {
+      allTagsCache.current = result;
+    }
+    return result;
+  }, [projects, selectedTags.length, favoriteOnly]);
 
   const openEditModal = (project: Project) => {
     setEditingProject(project);
@@ -91,12 +103,12 @@ export default function ProjectList({
   const closeEditModal = () => {
     setEditModalOpen(false);
     setEditingProject(null);
-    fetchProjects(search, selectedTag, page);
+    fetchProjects(search, selectedTags, favoriteOnly, page);
   };
 
   const closeAddRepo = () => {
     setAddRepoOpen(false);
-    fetchProjects(search, selectedTag, page);
+    fetchProjects(search, selectedTags, favoriteOnly, page);
   };
 
   const handleSingleDelete = async () => {
@@ -105,7 +117,7 @@ export default function ProjectList({
     try {
       await fetch(`/api/projects/${confirmDeleteId}`, { method: "DELETE" });
       setConfirmDeleteId(null);
-      fetchProjects(search, selectedTag, page);
+      fetchProjects(search, selectedTags, favoriteOnly, page);
     } catch {
       setFetchError("Failed to delete project.");
     } finally {
@@ -126,7 +138,7 @@ export default function ProjectList({
       setSelectedIds(new Set());
       setSelectMode(false);
       setConfirmBatchDelete(false);
-      fetchProjects(search, selectedTag, page);
+      fetchProjects(search, selectedTags, favoriteOnly, page);
     } catch {
       setFetchError("Failed to delete projects.");
     } finally {
@@ -151,7 +163,7 @@ export default function ProjectList({
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
-  const hasProjects = projects.length > 0 || total > 0;
+  const hasAnyProjects = initialTotal > 0;
   const deleteConfirmProject = confirmDeleteId !== null
     ? projects.find((p) => p.id === confirmDeleteId)
     : null;
@@ -163,7 +175,7 @@ export default function ProjectList({
           Projects
         </h1>
         <div className="flex items-center gap-2">
-          {hasProjects && !selectMode && (
+          {hasAnyProjects && !selectMode && (
             <button
               type="button"
               onClick={() => setSelectMode(true)}
@@ -203,30 +215,35 @@ export default function ProjectList({
         </div>
       </div>
 
-      {/* Search bar */}
-      {hasProjects && (
-        <div className="mt-4">
+      {/* Search + filter row */}
+      {hasAnyProjects && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects..."
-            className="w-full max-w-sm rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            placeholder="Search..."
+            className="w-full max-w-[180px] rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
-        </div>
-      )}
-
-      {/* Tag filter bar */}
-      {allTags.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-zinc-400 dark:text-zinc-500">Tags:</span>
+          <button
+            type="button"
+            onClick={() => { setFavoriteOnly(!favoriteOnly); }}
+            className={`rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+              favoriteOnly
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            }`}
+          >
+            ⭐ 收藏
+          </button>
           {allTags.map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => setSelectedTag(selectedTag === t ? "" : t)}
-              className={`rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
-                selectedTag === t
+              onClick={() => { setSelectedTags((prev: string[]) => prev.includes(t) ? prev.filter((x: string) => x !== t) : [...prev, t]); }}
+              className={`rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+                selectedTags.includes(t)
                   ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
                   : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
               }`}
@@ -234,10 +251,10 @@ export default function ProjectList({
               {t}
             </button>
           ))}
-          {selectedTag && (
+          {(selectedTags.length > 0 || favoriteOnly) && (
             <button
               type="button"
-              onClick={() => setSelectedTag("")}
+              onClick={() => { setSelectedTags([]); setFavoriteOnly(false); }}
               className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
             >
               clear
@@ -250,7 +267,7 @@ export default function ProjectList({
         <p className="mt-4 text-sm text-red-600 dark:text-red-400">{fetchError}</p>
       )}
 
-      {!fetchError && !hasProjects && (
+      {!fetchError && !hasAnyProjects && (
         <div className="mt-16 flex flex-col items-center gap-3 text-center">
           <p className="text-lg text-zinc-500 dark:text-zinc-400">
             No projects configured yet.
@@ -265,9 +282,9 @@ export default function ProjectList({
         </div>
       )}
 
-      {hasProjects && projects.length === 0 && (
+      {hasAnyProjects && projects.length === 0 && (
         <p className="mt-8 text-center text-sm text-zinc-400">
-          No projects match the current filters.
+          没有符合的项目
         </p>
       )}
 
@@ -279,7 +296,7 @@ export default function ProjectList({
                 key={project.id}
                 project={project}
                 onEdit={openEditModal}
-                onChange={() => fetchProjects(search, selectedTag, page)}
+                onChange={() => fetchProjects(search, selectedTags, favoriteOnly, page)}
                 onDelete={(id) => setConfirmDeleteId(id)}
                 selectMode={selectMode}
                 selected={selectedIds.has(project.id)}
