@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { Project, PullRequestItem } from "@/types";
+import type { PaginatedPRs, Project } from "@/types";
 import PRList from "@/components/PRList";
+import ProjectStatsBar from "@/components/ProjectStatsBar";
 
 const BACKEND = "http://localhost:8000";
 
@@ -20,16 +21,16 @@ async function getPRs(
   id: string,
   page: number,
   perPage: number
-): Promise<PullRequestItem[]> {
+): Promise<PaginatedPRs> {
   try {
     const res = await fetch(
-      `${BACKEND}/api/projects/${id}/pulls?page=${page}&per_page=${perPage}`,
+      `${BACKEND}/api/projects/${id}/pulls?page=${page}&per_page=${perPage}&state=open`,
       { cache: "no-store" }
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { items: [], total: 0, page, per_page: perPage, review_stats: null };
     return res.json();
   } catch {
-    return [];
+    return { items: [], total: 0, page, per_page: perPage, review_stats: null };
   }
 }
 
@@ -42,7 +43,7 @@ export default async function ProjectDetailPage({ params }: Props) {
   const page = 1;
   const perPage = 30;
 
-  const [project, prs] = await Promise.all([
+  const [project, prData] = await Promise.all([
     getProject(id),
     getPRs(id, page, perPage),
   ]);
@@ -87,37 +88,36 @@ export default async function ProjectDetailPage({ params }: Props) {
         Back
       </Link>
 
-      <div className="mt-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          {project.name}
-        </h1>
-        <div className="mt-1 flex items-center gap-3">
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            {project.repo_owner}/{project.repo_name}
-          </span>
-          {project.description && (
-            <>
-              <span className="text-zinc-300 dark:text-zinc-700">·</span>
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                {project.description}
-              </span>
-            </>
-          )}
+      <div className="mt-4 flex items-start justify-between gap-8">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-semibold text-zinc-900 dark:text-zinc-100">
+            {project.name}
+          </h1>
+          <div className="mt-1 flex items-center gap-3">
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+              {project.repo_owner}/{project.repo_name}
+            </span>
+            {project.description && (
+              <>
+                <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {project.description}
+                </span>
+              </>
+            )}
+          </div>
         </div>
+        <ProjectStatsBar projectId={project.id} initialStats={prData.review_stats} />
       </div>
 
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Open Pull Requests
-        </h2>
-        <div className="mt-3">
-          <PRList
-            project={project}
-            initialPRs={prs}
-            initialPage={page}
-            perPage={perPage}
-          />
-        </div>
+        <PRList
+          project={project}
+          initialPRs={prData.items}
+          initialTotal={prData.total}
+          initialPage={page}
+          perPage={perPage}
+        />
       </div>
     </div>
   );
