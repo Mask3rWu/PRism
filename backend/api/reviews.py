@@ -58,7 +58,7 @@ async def retry_writeback(review_id: int):
 
         ok = await writeback_comment(
             project.repo_owner, project.repo_name,
-            review.pr_number, project.encrypted_pat,
+            review.pr_number,
             full_comment,
         )
         if ok:

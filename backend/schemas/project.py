@@ -7,13 +7,11 @@ class ProjectCreate(BaseModel):
     name: str
     repo_owner: str
     repo_name: str
-    pat: str
     description: str = ""
 
 
 class ProjectUpdate(BaseModel):
     description: str | None = None
-    pat: str | None = None
 
 
 class ProjectResponse(BaseModel):
