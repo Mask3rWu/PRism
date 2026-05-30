@@ -1,28 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import ProjectCard from "@/components/ProjectCard";
 import AddProjectModal from "@/components/AddProjectModal";
 import AddRepoModal from "@/components/AddRepoModal";
 import type { Project } from "@/types";
 
-export default function ProjectList({ initialProjects }: { initialProjects: Project[] }) {
+export default function ProjectList({
+  initialProjects,
+  initialTotal,
+}: {
+  initialProjects: Project[];
+  initialTotal: number;
+}) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const [selectedTag, setSelectedTag] = useState("");
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/projects");
+      const res = await fetch("/api/projects?per_page=100");
       if (!res.ok) throw new Error("Failed");
-      setProjects(await res.json());
+      const data = await res.json();
+      setProjects(data.items ?? []);
       setFetchError("");
     } catch {
       setFetchError("Could not load projects. Is the backend running?");
     }
-  };
+  }, []);
+
+  // Extract unique tags across all projects
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    projects.forEach((p) => (p.tags ?? []).forEach((t) => tagSet.add(t)));
+    return Array.from(tagSet).sort();
+  }, [projects]);
+
+  const filteredProjects = selectedTag
+    ? projects.filter((p) => (p.tags ?? []).includes(selectedTag))
+    : projects;
 
   const openEditModal = (project: Project) => {
     setEditingProject(project);
@@ -57,6 +76,36 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
         </button>
       </div>
 
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">Tags:</span>
+          {allTags.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setSelectedTag(selectedTag === t ? "" : t)}
+              className={`rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                selectedTag === t
+                  ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+          {selectedTag && (
+            <button
+              type="button"
+              onClick={() => setSelectedTag("")}
+              className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            >
+              clear
+            </button>
+          )}
+        </div>
+      )}
+
       {fetchError && (
         <p className="mt-4 text-sm text-red-600 dark:text-red-400">{fetchError}</p>
       )}
@@ -76,13 +125,20 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
         </div>
       )}
 
-      {hasProjects && (
+      {hasProjects && filteredProjects.length === 0 && (
+        <p className="mt-8 text-center text-sm text-zinc-400">
+          No projects match the selected tag.
+        </p>
+      )}
+
+      {hasProjects && filteredProjects.length > 0 && (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               onEdit={openEditModal}
+              onChange={handleRefresh}
             />
           ))}
         </div>

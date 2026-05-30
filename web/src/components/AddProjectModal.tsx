@@ -63,6 +63,7 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
             repo_owner: data.get("repo_owner") as string,
             repo_name: data.get("repo_name") as string,
             description: data.get("description") as string,
+            repo_private: false,
           };
 
           const res = await fetch("/api/projects", {

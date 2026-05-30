@@ -128,6 +128,8 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
           repo_owner: owner,
           repo_name: repoName,
           description,
+          repo_private:
+            tab === "personal" ? selectedRepo!.private : false,
         }),
       });
 

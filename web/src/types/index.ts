@@ -4,6 +4,8 @@ export interface Project {
   repo_owner: string;
   repo_name: string;
   description: string;
+  tags: string[];
+  is_favorite: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -13,10 +15,21 @@ export interface ProjectCreatePayload {
   repo_owner: string;
   repo_name: string;
   description: string;
+  repo_private: boolean;
 }
 
 export interface ProjectUpdatePayload {
+  name?: string;
   description?: string;
+  tags?: string[];
+  is_favorite?: boolean;
+}
+
+export interface PaginatedProjects {
+  items: Project[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 export interface Settings {
