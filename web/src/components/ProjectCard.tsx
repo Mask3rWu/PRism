@@ -8,9 +8,21 @@ interface Props {
   project: Project;
   onEdit: (project: Project) => void;
   onChange: () => void;
+  onDelete: (id: number) => void;
+  selectMode: boolean;
+  selected: boolean;
+  onSelect: (id: number, checked: boolean) => void;
 }
 
-export default function ProjectCard({ project, onEdit, onChange }: Props) {
+export default function ProjectCard({
+  project,
+  onEdit,
+  onChange,
+  onDelete,
+  selectMode,
+  selected,
+  onSelect,
+}: Props) {
   const [favLoading, setFavLoading] = useState(false);
   const created = new Date(project.created_at).toLocaleDateString("en-US", {
     year: "numeric",
@@ -42,8 +54,21 @@ export default function ProjectCard({ project, onEdit, onChange }: Props) {
 
   return (
     <div className="group relative rounded-xl border border-zinc-200 bg-white p-5 transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Select checkbox */}
+      {selectMode && (
+        <div className="absolute left-3 top-3 z-10">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => onSelect(project.id, e.target.checked)}
+            className="size-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       <Link href={`/projects/${project.id}`} className="block">
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${selectMode ? "ml-6" : ""}`}>
           <h2 className="text-lg font-semibold text-zinc-900 group-hover:text-indigo-600 dark:text-zinc-100 dark:group-hover:text-indigo-400">
             {project.name}
           </h2>
@@ -51,16 +76,16 @@ export default function ProjectCard({ project, onEdit, onChange }: Props) {
             <span className="text-amber-500 text-sm">&#9733;</span>
           )}
         </div>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+        <p className={`mt-1 text-sm text-zinc-500 dark:text-zinc-400 ${selectMode ? "ml-6" : ""}`}>
           {project.repo_owner}/{project.repo_name}
         </p>
         {project.description && (
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2">
+          <p className={`mt-2 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2 ${selectMode ? "ml-6" : ""}`}>
             {project.description}
           </p>
         )}
         {tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap items-center gap-1">
+          <div className={`mt-2 flex flex-wrap items-center gap-1 ${selectMode ? "ml-6" : ""}`}>
             {visibleTags.map((t) => (
               <span
                 key={t}
@@ -79,7 +104,7 @@ export default function ProjectCard({ project, onEdit, onChange }: Props) {
             )}
           </div>
         )}
-        <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
+        <p className={`mt-3 text-xs text-zinc-400 dark:text-zinc-500 ${selectMode ? "ml-6" : ""}`}>
           Created {created}
         </p>
       </Link>
@@ -112,6 +137,20 @@ export default function ProjectCard({ project, onEdit, onChange }: Props) {
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
             <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.342z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDelete(project.id);
+          }}
+          className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-red-500 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+          title="Delete project"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
+            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193v-.443A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075v-.325c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
           </svg>
         </button>
       </div>

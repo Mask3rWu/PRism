@@ -20,6 +20,13 @@ export default function ProjectList({
   const [fetchError, setFetchError] = useState("");
   const [selectedTag, setSelectedTag] = useState("");
 
+  // Delete state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const handleRefresh = useCallback(async () => {
     try {
       const res = await fetch("/api/projects?per_page=100");
@@ -32,7 +39,6 @@ export default function ProjectList({
     }
   }, []);
 
-  // Extract unique tags across all projects
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
     projects.forEach((p) => (p.tags ?? []).forEach((t) => tagSet.add(t)));
@@ -59,7 +65,61 @@ export default function ProjectList({
     handleRefresh();
   };
 
+  // Delete handlers
+  const handleSingleDelete = async () => {
+    if (confirmDeleteId === null) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/projects/${confirmDeleteId}`, { method: "DELETE" });
+      setConfirmDeleteId(null);
+      handleRefresh();
+    } catch {
+      setFetchError("Failed to delete project.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/projects/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      setConfirmBatchDelete(false);
+      handleRefresh();
+    } catch {
+      setFetchError("Failed to delete projects.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSelectToggle = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleSelectModeOff = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setConfirmBatchDelete(false);
+  };
+
   const hasProjects = projects.length > 0;
+  const deleteConfirmProject = confirmDeleteId !== null
+    ? projects.find((p) => p.id === confirmDeleteId)
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -67,13 +127,45 @@ export default function ProjectList({
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
           Projects
         </h1>
-        <button
-          type="button"
-          onClick={() => setAddRepoOpen(true)}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-        >
-          Add Repository
-        </button>
+        <div className="flex items-center gap-2">
+          {hasProjects && !selectMode && (
+            <button
+              type="button"
+              onClick={() => setSelectMode(true)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+            >
+              Select
+            </button>
+          )}
+          {selectMode && (
+            <>
+              <button
+                type="button"
+                onClick={handleSelectModeOff}
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmBatchDelete(true)}
+                disabled={selectedIds.size === 0}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                Delete Selected ({selectedIds.size})
+              </button>
+            </>
+          )}
+          {!selectMode && (
+            <button
+              type="button"
+              onClick={() => setAddRepoOpen(true)}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              Add Repository
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tag filter bar */}
@@ -139,8 +231,78 @@ export default function ProjectList({
               project={project}
               onEdit={openEditModal}
               onChange={handleRefresh}
+              onDelete={(id) => setConfirmDeleteId(id)}
+              selectMode={selectMode}
+              selected={selectedIds.has(project.id)}
+              onSelect={handleSelectToggle}
             />
           ))}
+        </div>
+      )}
+
+      {/* Single delete confirmation modal */}
+      {confirmDeleteId !== null && deleteConfirmProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              Delete Project
+            </h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Are you sure you want to delete <strong>{deleteConfirmProject.name}</strong>?
+              This will also remove all associated reviews and cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={deleting}
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSingleDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch delete confirmation modal */}
+      {confirmBatchDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              Delete Projects
+            </h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Are you sure you want to delete <strong>{selectedIds.size}</strong> selected projects?
+              This will also remove all associated reviews and cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmBatchDelete(false)}
+                disabled={deleting}
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : `Delete ${selectedIds.size}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
