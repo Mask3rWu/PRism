@@ -106,9 +106,34 @@ export default function SettingsModal({ open, onClose }: Props) {
               className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               placeholder="ghp_..."
             />
-            <p className="mt-1 text-xs text-zinc-400">
-              Used for all projects. Needs <code>repo</code> scope for private repositories.
-            </p>
+            <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+              <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                How to get a token:
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  Go to{" "}
+                  <a
+                    href="https://github.com/settings/tokens/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 underline"
+                  >
+                    GitHub &rarr; Settings &rarr; Developer settings &rarr; Personal access tokens &rarr; Tokens (classic)
+                  </a>
+                </li>
+                <li>Click "Generate new token" &rarr; "Generate new token (classic)"</li>
+                <li>Set an expiration date and select the following scopes:</li>
+              </ol>
+              <ul className="list-disc list-inside mt-1 space-y-0.5">
+                <li>
+                  <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">repo</code> — access public and private repositories
+                </li>
+                <li>
+                  <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">read:org</code> — read organization membership (optional, for org repos)
+                </li>
+              </ul>
+            </div>
           </div>
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
