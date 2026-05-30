@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.database import SessionLocal
 from backend.core.security import encrypt_token
-from backend.models import AgentTiming, Project, Review, ReviewStatus
+from backend.models import AgentTiming, AppSettings, Project, Review, ReviewStatus
 
 
 def _now() -> datetime:
@@ -96,12 +96,14 @@ def seed_database() -> None:
         except Exception:
             fake_pat = "seed-placeholder-encrypted-pat"
 
+        # ── Global settings ──────────────────────────────────────
+        db.add(AppSettings(id=1, encrypted_pat=fake_pat))
+
         # ── Project 1: fully populated with reviews ──────────────────────
         p1 = Project(
             name="Seed Demo Project",
             repo_owner="test-owner",
             repo_name="seed-demo",
-            encrypted_pat=fake_pat,
             description=(
                 "A demo project with sample AI review data. This project showcases "
                 "all PR review features including risk analysis, issue detection, and test suggestions."
@@ -116,7 +118,6 @@ def seed_database() -> None:
             name="Empty Test Project",
             repo_owner="test-owner",
             repo_name="empty-test",
-            encrypted_pat=fake_pat,
             description=(
                 "A minimal test project with no reviews yet. Use this to test "
                 "the empty state and initial review trigger flow."

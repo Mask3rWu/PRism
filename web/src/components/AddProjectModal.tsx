@@ -36,20 +36,13 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
 
       try {
         if (isEdit && project) {
-          const payload: ProjectUpdatePayload = {};
           const desc = (data.get("description") as string).trim();
-          const pat = (data.get("pat") as string).trim();
-          if (desc !== (project.description ?? "")) {
-            payload.description = desc;
-          }
-          if (pat) {
-            payload.pat = pat;
-          }
-          if (!payload.description && !payload.pat) {
+          if (desc === (project.description ?? "")) {
             setError("No changes to save");
             setLoading(false);
             return;
           }
+          const payload: ProjectUpdatePayload = { description: desc };
 
           const res = await fetch(`/api/projects/${project.id}`, {
             method: "PUT",
@@ -69,7 +62,6 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
             name: data.get("name") as string,
             repo_owner: data.get("repo_owner") as string,
             repo_name: data.get("repo_name") as string,
-            pat: data.get("pat") as string,
             description: data.get("description") as string,
           };
 
@@ -133,17 +125,6 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  GitHub PAT
-                </label>
-                <input
-                  name="pat"
-                  type="password"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  placeholder="Leave blank to keep current"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Description
                 </label>
                 <textarea
@@ -191,18 +172,6 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
                     placeholder="repo"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  GitHub PAT
-                </label>
-                <input
-                  name="pat"
-                  type="password"
-                  required
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  placeholder="ghp_..."
-                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">

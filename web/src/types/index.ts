@@ -12,13 +12,15 @@ export interface ProjectCreatePayload {
   name: string;
   repo_owner: string;
   repo_name: string;
-  pat: string;
   description: string;
 }
 
 export interface ProjectUpdatePayload {
   description?: string;
-  pat?: string;
+}
+
+export interface Settings {
+  has_pat: boolean;
 }
 
 export interface PullRequestItem {

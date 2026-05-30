@@ -29,7 +29,7 @@ async def _run_review_background(review_id: int) -> None:
             project = review.project
             diff = await fetch_pr_diff(
                 project.repo_owner, project.repo_name,
-                review.pr_number, project.encrypted_pat,
+                review.pr_number,
             )
 
             db.refresh(review)
@@ -72,7 +72,7 @@ async def _run_review_background(review_id: int) -> None:
                 )
                 ok = await writeback_comment(
                     project.repo_owner, project.repo_name,
-                    review.pr_number, project.encrypted_pat,
+                    review.pr_number,
                     full_comment,
                 )
                 if not ok:
