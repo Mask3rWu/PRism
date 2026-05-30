@@ -109,6 +109,9 @@ def seed_database() -> None:
                 "all PR review features including risk analysis, issue detection, and test suggestions."
             ),
             is_seeded=True,
+            tags='["开源", "Demo"]',
+            is_favorite=True,
+            permission="Owner",
         )
         db.add(p1)
         db.flush()
@@ -123,6 +126,8 @@ def seed_database() -> None:
                 "the empty state and initial review trigger flow."
             ),
             is_seeded=True,
+            tags='["开源"]',
+            permission="Viewer",
         )
         db.add(p2)
         db.flush()

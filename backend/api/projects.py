@@ -1,9 +1,12 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import json
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
 from backend.models import Project, Review, ReviewStatus
-from backend.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.schemas.pull_request import PullRequestItem
 from backend.schemas.review import ReviewResponse
 from backend.seed import SEED_PR_LISTS
@@ -30,6 +33,8 @@ async def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
         repo_owner=body.repo_owner,
         repo_name=body.repo_name,
         description=body.description,
+        permission=body.permission,
+        tags=json.dumps(body.tags),
     )
     db.add(project)
     db.commit()
@@ -37,9 +42,40 @@ async def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
     return project
 
 
-@router.get("", response_model=list[ProjectResponse])
-def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).all()
+@router.get("", response_model=PaginatedProjectsResponse)
+def list_projects(
+    search: str = Query(default=""),
+    tag: list[str] = Query(default=[]),
+    favorite: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=12, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Project)
+
+    if search:
+        query = query.filter(Project.name.ilike(f"%{search}%"))
+
+    if favorite:
+        query = query.filter(Project.is_favorite == True)
+
+    query = query.order_by(Project.is_favorite.desc(), Project.updated_at.desc())
+
+    projects = query.all()
+
+    if tag:
+        projects = [p for p in projects if any(t in json.loads(p.tags or "[]") for t in tag)]
+
+    total = len(projects)
+    start = (page - 1) * per_page
+    items = projects[start : start + per_page]
+
+    return PaginatedProjectsResponse(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -47,6 +83,9 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    project.last_synced_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(project)
     return project
 
 
@@ -56,8 +95,14 @@ def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(g
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if body.name is not None:
+        project.name = body.name
     if body.description is not None:
         project.description = body.description
+    if body.tags is not None:
+        project.tags = json.dumps(body.tags)
+    if body.is_favorite is not None:
+        project.is_favorite = body.is_favorite
 
     db.commit()
     db.refresh(project)
@@ -71,6 +116,16 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     db.delete(project)
+    db.commit()
+    return None
+
+
+@router.post("/batch-delete", status_code=204)
+def batch_delete_projects(body: BatchDeleteRequest, db: Session = Depends(get_db)):
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="No project IDs provided")
+
+    db.query(Project).filter(Project.id.in_(body.ids)).delete(synchronize_session=False)
     db.commit()
     return None
 
