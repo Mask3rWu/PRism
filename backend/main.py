@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from backend.core.config import settings
-from backend.core.database import Base, engine
+from backend.core.database import Base, _migrate_db, engine
 from backend.core.security import ensure_fernet_key
 import backend.models  # noqa: F401 — register ORM models with Base.metadata
 
@@ -16,6 +16,7 @@ from backend.seed import seed_database
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _migrate_db()
     Base.metadata.create_all(bind=engine)
     ensure_fernet_key()
     seed_database()

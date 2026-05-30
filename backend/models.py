@@ -28,6 +28,8 @@ class Project(Base):
     encrypted_pat: Mapped[str] = mapped_column(Text, nullable=True, default="")
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     is_seeded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    tags: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
