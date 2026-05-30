@@ -111,6 +111,7 @@ def seed_database() -> None:
             is_seeded=True,
             tags='["开源", "Demo"]',
             is_favorite=True,
+            permission="Owner",
         )
         db.add(p1)
         db.flush()
@@ -126,6 +127,7 @@ def seed_database() -> None:
             ),
             is_seeded=True,
             tags='["开源"]',
+            permission="Viewer",
         )
         db.add(p2)
         db.flush()

@@ -20,6 +20,10 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN tags TEXT DEFAULT '[]'")
         if "is_favorite" not in columns:
             conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN is_favorite BOOLEAN DEFAULT 0")
+        if "permission" not in columns:
+            conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN permission TEXT DEFAULT 'Viewer'")
+        if "last_synced_at" not in columns:
+            conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN last_synced_at TIMESTAMP")
         conn.commit()
 
 

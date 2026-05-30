@@ -9,7 +9,8 @@ class ProjectCreate(BaseModel):
     repo_owner: str
     repo_name: str
     description: str = ""
-    repo_private: bool = False
+    permission: str = "Viewer"
+    tags: list[str] = []
 
 
 class ProjectUpdate(BaseModel):
@@ -29,6 +30,8 @@ class ProjectResponse(BaseModel):
     description: str
     tags: list[str]
     is_favorite: bool
+    permission: str
+    last_synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

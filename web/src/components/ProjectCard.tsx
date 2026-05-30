@@ -14,6 +14,13 @@ interface Props {
   onSelect: (id: number, checked: boolean) => void;
 }
 
+const PERMISSION_COLORS: Record<string, string> = {
+  Owner: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  Maintainer: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  Collaborator: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  Viewer: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+};
+
 export default function ProjectCard({
   project,
   onEdit,
@@ -31,8 +38,8 @@ export default function ProjectCard({
   });
 
   const tags: string[] = project.tags ?? [];
-  const visibleTags = tags.slice(0, 2);
-  const overflow = tags.length - 2;
+  const visibleTags = tags.slice(0, 3);
+  const overflow = tags.length - 3;
 
   const handleFavorite = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -67,93 +74,102 @@ export default function ProjectCard({
         </div>
       )}
 
-      <Link href={`/projects/${project.id}`} className="block">
-        <div className={`flex items-center gap-2 ${selectMode ? "ml-6" : ""}`}>
-          <h2 className="text-lg font-semibold text-zinc-900 group-hover:text-indigo-600 dark:text-zinc-100 dark:group-hover:text-indigo-400">
-            {project.name}
+      {/* Top row: star + name + permission + action buttons */}
+      <div className={`flex items-center justify-between ${selectMode ? "ml-6" : ""}`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={handleFavorite}
+            disabled={favLoading}
+            className="shrink-0 text-lg transition-colors"
+            title={project.is_favorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            {project.is_favorite ? (
+              <span className="text-amber-500">&#9733;</span>
+            ) : (
+              <span className="text-zinc-300 hover:text-amber-400 dark:text-zinc-600">&#9734;</span>
+            )}
+          </button>
+          <h2 className="text-lg font-semibold text-zinc-900 truncate dark:text-zinc-100">
+            <Link href={`/projects/${project.id}`} className="hover:text-indigo-600 dark:hover:text-indigo-400">
+              {project.name}
+            </Link>
           </h2>
-          {project.is_favorite && (
-            <span className="text-amber-500 text-sm">&#9733;</span>
-          )}
+          <span
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+              PERMISSION_COLORS[project.permission] ?? PERMISSION_COLORS.Viewer
+            }`}
+          >
+            {project.permission}
+          </span>
         </div>
-        <p className={`mt-1 text-sm text-zinc-500 dark:text-zinc-400 ${selectMode ? "ml-6" : ""}`}>
+
+        {/* Action buttons — always visible */}
+        <div className="flex items-center gap-1 shrink-0 ml-2">
+          <button
+            type="button"
+            onClick={() => onEdit(project)}
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+            title="Edit project"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
+              <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.342z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(project.id)}
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-red-500 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+            title="Delete project"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
+              <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193v-.443A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075v-.325c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Repo path + tags */}
+      <div className={`mt-1.5 flex flex-wrap items-center gap-2 ${selectMode ? "ml-6" : ""}`}>
+        <Link
+          href={`/projects/${project.id}`}
+          className="text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
           {project.repo_owner}/{project.repo_name}
-        </p>
-        {project.description && (
-          <p className={`mt-2 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2 ${selectMode ? "ml-6" : ""}`}>
-            {project.description}
-          </p>
-        )}
+        </Link>
         {tags.length > 0 && (
-          <div className={`mt-2 flex flex-wrap items-center gap-1 ${selectMode ? "ml-6" : ""}`}>
+          <span className="inline-flex items-center gap-1">
             {visibleTags.map((t) => (
               <span
                 key={t}
-                className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                className="rounded-md bg-green-100 px-1.5 py-0.5 text-[11px] text-green-700 dark:bg-green-900/30 dark:text-green-300"
               >
                 {t}
               </span>
             ))}
             {overflow > 0 && (
               <span
-                className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+                className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                 title={tags.join(", ")}
               >
                 +{overflow}
               </span>
             )}
-          </div>
+          </span>
         )}
-        <p className={`mt-3 text-xs text-zinc-400 dark:text-zinc-500 ${selectMode ? "ml-6" : ""}`}>
-          Created {created}
-        </p>
-      </Link>
-
-      {/* Action buttons */}
-      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          type="button"
-          onClick={handleFavorite}
-          disabled={favLoading}
-          className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-amber-500 dark:hover:bg-zinc-800 dark:hover:text-amber-400"
-          title={project.is_favorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
-            {project.is_favorite ? (
-              <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
-            ) : (
-              <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" opacity="0.3" />
-            )}
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            onEdit(project);
-          }}
-          className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-          title="Edit project"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
-            <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.342z" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDelete(project.id);
-          }}
-          className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-red-500 dark:hover:bg-zinc-800 dark:hover:text-red-400"
-          title="Delete project"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
-            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193v-.443A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075v-.325c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
-          </svg>
-        </button>
       </div>
+
+      {/* Description */}
+      {project.description && (
+        <p className={`mt-2 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2 ${selectMode ? "ml-6" : ""}`}>
+          {project.description}
+        </p>
+      )}
+
+      {/* Created date */}
+      <p className={`mt-3 text-xs text-zinc-400 dark:text-zinc-500 ${selectMode ? "ml-6" : ""}`}>
+        Created {created}
+      </p>
     </div>
   );
 }

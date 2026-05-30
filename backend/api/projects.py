@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -27,13 +28,13 @@ async def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
             detail=f"Repository {body.repo_owner}/{body.repo_name} is already added as '{existing.name}'.",
         )
 
-    initial_tag = "个人" if body.repo_private else "开源"
     project = Project(
         name=body.name,
         repo_owner=body.repo_owner,
         repo_name=body.repo_name,
         description=body.description,
-        tags=json.dumps([initial_tag]),
+        permission=body.permission,
+        tags=json.dumps(body.tags),
     )
     db.add(project)
     db.commit()
@@ -78,6 +79,9 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    project.last_synced_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(project)
     return project
 
 

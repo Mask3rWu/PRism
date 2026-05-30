@@ -6,6 +6,8 @@ export interface Project {
   description: string;
   tags: string[];
   is_favorite: boolean;
+  permission: string;
+  last_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -15,7 +17,7 @@ export interface ProjectCreatePayload {
   repo_owner: string;
   repo_name: string;
   description: string;
-  repo_private: boolean;
+  permission: string;
 }
 
 export interface ProjectUpdatePayload {
@@ -43,6 +45,7 @@ export interface GitHubRepoItem {
   private: boolean;
   description: string | null;
   html_url: string;
+  permission: string;
 }
 
 export interface PullRequestItem {

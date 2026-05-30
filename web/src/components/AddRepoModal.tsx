@@ -34,6 +34,8 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
   const [step, setStep] = useState<Step>("select");
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
+  const [confirmTags, setConfirmTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
 
   useEffect(() => {
     if (!open) {
@@ -44,6 +46,8 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
       setUrl("");
       setSearch("");
       setStep("select");
+      setConfirmTags([]);
+      setTagInput("");
       return;
     }
     setTab(initialTab);
@@ -128,8 +132,11 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
           repo_owner: owner,
           repo_name: repoName,
           description,
-          repo_private:
-            tab === "personal" ? selectedRepo!.private : false,
+          permission:
+            tab === "personal"
+              ? selectedRepo!.permission
+              : "Viewer",
+          tags: confirmTags,
         }),
       });
 
@@ -152,6 +159,27 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
     setError("");
     setSelectedRepo(null);
     setValidatedRepo(null);
+    setConfirmTags([]);
+    setTagInput("");
+  };
+
+  const addTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !confirmTags.includes(trimmed)) {
+      setConfirmTags((prev) => [...prev, trimmed]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (tag: string) => {
+    setConfirmTags((prev) => prev.filter((t) => t !== tag));
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addTag();
+    }
   };
 
   // Reset when switching tabs
@@ -163,6 +191,8 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
     setValidatedRepo(null);
     setUrl("");
     setSearch("");
+    setConfirmTags([]);
+    setTagInput("");
   };
 
   if (!open) return null;
@@ -360,6 +390,36 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
                 onChange={(e) => setDescription(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Tags
+              </label>
+              <div className="mt-1 flex flex-wrap items-center gap-1 rounded-lg border border-zinc-300 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
+                {confirmTags.map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex items-center gap-0.5 rounded-md bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                  >
+                    {t}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(t)}
+                      className="ml-0.5 text-green-500 hover:text-green-700 dark:hover:text-green-200"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  placeholder={confirmTags.length === 0 ? "Add tag... (press Enter)" : "Add..."}
+                  className="min-w-[80px] flex-1 bg-transparent px-1 py-0.5 text-sm text-zinc-900 outline-none dark:text-zinc-100"
+                />
+              </div>
             </div>
           </div>
         )}

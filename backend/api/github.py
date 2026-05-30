@@ -25,6 +25,15 @@ async def get_user_repos(db: Session = Depends(get_db)):
     if repos is None:
         raise HTTPException(status_code=502, detail="Failed to fetch repositories from GitHub")
 
+    def _derive_permission(perms: dict) -> str:
+        if perms.get("admin"):
+            return "Owner"
+        if perms.get("maintain"):
+            return "Maintainer"
+        if perms.get("push"):
+            return "Collaborator"
+        return "Viewer"
+
     return [
         {
             "full_name": r["full_name"],
@@ -33,6 +42,7 @@ async def get_user_repos(db: Session = Depends(get_db)):
             "private": r["private"],
             "description": r.get("description"),
             "html_url": r["html_url"],
+            "permission": _derive_permission(r.get("permissions", {})),
         }
         for r in repos
     ]
