@@ -40,3 +40,14 @@ class ProjectResponse(BaseModel):
         if isinstance(v, list):
             return v
         return []
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+class PaginatedProjectsResponse(BaseModel):
+    items: list[ProjectResponse]
+    total: int
+    page: int
+    per_page: int
