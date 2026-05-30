@@ -68,11 +68,18 @@ export interface PullRequestItem {
   merged_at: string | null;
 }
 
+export interface ReviewStats {
+  total: number;
+  reviewed: number;
+  not_reviewed: number;
+}
+
 export interface PaginatedPRs {
   items: PullRequestItem[];
   total: number;
   page: number;
   per_page: number;
+  review_stats: ReviewStats | null;
 }
 
 export interface AgentTimingItem {

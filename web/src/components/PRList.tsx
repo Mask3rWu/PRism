@@ -9,6 +9,7 @@ interface Props {
   initialTotal: number;
   initialPage: number;
   perPage: number;
+  initialReviewStats: { total: number; reviewed: number; not_reviewed: number } | null;
 }
 
 const STATUS_CONFIG: Record<
@@ -117,10 +118,11 @@ function prStateType(pr: PullRequestItem): keyof typeof PR_STATE_ICONS | null {
   return pr.merged_at ? "merged" : "closed";
 }
 
-export default function PRList({ project, initialPRs, initialTotal, initialPage, perPage }: Props) {
+export default function PRList({ project, initialPRs, initialTotal, initialPage, perPage, initialReviewStats }: Props) {
   const [prs, setPRs] = useState<PullRequestItem[]>(initialPRs);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage);
+  const [reviewStats, setReviewStats] = useState(initialReviewStats);
   const [loadingPage, setLoadingPage] = useState(false);
   const [triggeringPRs, setTriggeringPRs] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -288,6 +290,7 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
       setPRs(data.items);
       setTotal(data.total);
       setPage(data.page);
+      if (data.review_stats) setReviewStats(data.review_stats);
     } catch {
       setError("Failed to load pull requests");
     } finally {
@@ -359,6 +362,27 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400">
           {error}
+        </div>
+      )}
+
+      {/* Review stats */}
+      {reviewStats && (
+        <div className="mb-4 flex items-center gap-3 text-sm">
+          <span className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-zinc-400" />
+            <span className="text-zinc-600 dark:text-zinc-400">Total</span>
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{reviewStats.total}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-green-500" />
+            <span className="text-zinc-600 dark:text-zinc-400">Reviewed</span>
+            <span className="font-semibold text-green-700 dark:text-green-400">{reviewStats.reviewed}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-yellow-500" />
+            <span className="text-zinc-600 dark:text-zinc-400">Not Reviewed</span>
+            <span className="font-semibold text-yellow-700 dark:text-yellow-400">{reviewStats.not_reviewed}</span>
+          </span>
         </div>
       )}
 

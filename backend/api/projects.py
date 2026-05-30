@@ -2,15 +2,16 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
 from backend.models import Project, Review, ReviewStatus
 from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
-from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem
+from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem, ReviewStats
 from backend.schemas.review import ReviewResponse
 from backend.seed import SEED_PR_LISTS
-from backend.services.github.client import fetch_pr_detail, fetch_pulls, search_pulls
+from backend.services.github.client import count_pulls, fetch_pr_detail, fetch_pulls, search_pulls
 from backend.services.review.service import _run_review_background
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -225,11 +226,30 @@ async def list_pull_requests(
     items = [_pr_to_item(pr, review_status_map) for pr in prs]
     items = _filter_by_pr_status(items, pr_status)
 
+    # Compute review stats (total across all PRs, not just current page/filter)
+    reviewed_count = db.query(func.count(func.distinct(Review.pr_number))).filter(
+        Review.project_id == project_id,
+    ).scalar() or 0
+
+    if project.is_seeded:
+        all_seed = SEED_PR_LISTS.get(project.id, [])
+        total_prs = len(all_seed)
+    else:
+        gh_counts = await count_pulls(project.repo_owner, project.repo_name)
+        total_prs = sum(gh_counts.values()) if gh_counts else 0
+
+    stats = ReviewStats(
+        total=total_prs,
+        reviewed=reviewed_count,
+        not_reviewed=max(0, total_prs - reviewed_count),
+    )
+
     return PaginatedPRResponse(
         items=items,
         total=total,
         page=page,
         per_page=per_page,
+        review_stats=stats,
     )
 
 

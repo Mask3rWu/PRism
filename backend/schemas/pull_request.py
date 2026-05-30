@@ -25,8 +25,15 @@ class PullRequestItem(BaseModel):
     merged_at: datetime | None = None
 
 
+class ReviewStats(BaseModel):
+    total: int
+    reviewed: int
+    not_reviewed: int
+
+
 class PaginatedPRResponse(BaseModel):
     items: list[PullRequestItem]
     total: int
     page: int
     per_page: int
+    review_stats: ReviewStats | None = None

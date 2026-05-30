@@ -103,6 +103,29 @@ async def fetch_pulls(
     return None
 
 
+async def count_pulls(owner: str, repo: str) -> dict[str, int] | None:
+    """Count total open/closed PRs using the Search API. Returns {open, closed} or None."""
+    pat = _get_decrypted_pat()
+    if not pat:
+        return None
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    counts = {}
+    async with httpx.AsyncClient() as client:
+        for state in ("open", "closed"):
+            q = f"type:pr+repo:{owner}/{repo}+state:{state}"
+            try:
+                resp = await client.get(
+                    "https://api.github.com/search/issues",
+                    headers=headers,
+                    params={"q": q, "per_page": 1},
+                )
+                if resp.status_code == 200:
+                    counts[state] = resp.json().get("total_count", 0)
+            except httpx.RequestError:
+                return None
+    return counts
+
+
 async def search_pulls(
     owner: str, repo: str,
     page: int = 1, per_page: int = 30,

@@ -107,17 +107,17 @@ export default async function ProjectDetailPage({ params }: Props) {
       </div>
 
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+        <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Pull Requests
         </h2>
-        <div className="mt-3">
-          <PRList
-            project={project}
-            initialPRs={prData.items}
-            initialTotal={prData.total}
-            initialPage={page}
-            perPage={perPage}
-          />
+        <PRList
+          project={project}
+          initialPRs={prData.items}
+          initialTotal={prData.total}
+          initialPage={page}
+          perPage={perPage}
+          initialReviewStats={prData.review_stats}
+        />
         </div>
       </div>
     </div>
