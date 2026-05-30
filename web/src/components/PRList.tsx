@@ -535,10 +535,13 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
                   <div className="flex items-center gap-2 px-4 pt-3">
                     {/* PR state icon */}
                     {stateIconData && (
-                      <span className="shrink-0" title={stateIconData.label}>
+                      <span className="group relative shrink-0">
                         <svg className="size-4" viewBox="0 0 16 16" fill={stateIconData.color}>
                           <path d={stateIconData.path} />
                         </svg>
+                        <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-zinc-200 dark:text-zinc-800">
+                          {stateIconData.label}
+                        </span>
                       </span>
                     )}
                     {/* Draft badge */}
