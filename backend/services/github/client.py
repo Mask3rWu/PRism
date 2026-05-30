@@ -18,7 +18,7 @@ def _get_decrypted_pat() -> str:
 
 
 async def validate_pat_global(pat: str) -> tuple[bool, str | None]:
-    """Validate a GitHub PAT by calling the /user endpoint."""
+    """Validate a GitHub PAT by calling the /user endpoint and checking scopes."""
     url = "https://api.github.com/user"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
@@ -29,8 +29,17 @@ async def validate_pat_global(pat: str) -> tuple[bool, str | None]:
             return False, "Failed to connect to GitHub API"
 
     if response.status_code == 200:
+        scopes = response.headers.get("X-OAuth-Scopes", "")
+        scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+        if not scopes:
+            return False, "PAT has no scopes. Generate a new token with repo scope."
+        if "repo" not in scope_list:
+            return False, f"PAT is missing the 'repo' scope. Current scopes: {', '.join(scope_list)}. Please generate a new token with repo access."
         return True, None
     if response.status_code in (401, 403):
+        scopes = response.headers.get("X-OAuth-Scopes", "")
+        if scopes:
+            return False, f"PAT is valid but lacks permissions for this action. Current scopes: {scopes}"
         return False, "Invalid PAT or insufficient permissions"
     return False, f"GitHub API error: {response.status_code}"
 
@@ -47,10 +56,19 @@ async def validate_pat(owner: str, repo: str, pat: str) -> tuple[bool, str | Non
             return False, "Failed to connect to GitHub API"
 
     if response.status_code == 200:
+        scopes = response.headers.get("X-OAuth-Scopes", "")
+        scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+        if not scopes:
+            return False, "PAT has no scopes. Generate a new token with repo scope."
+        if "repo" not in scope_list:
+            return False, f"PAT is missing the 'repo' scope. Current scopes: {', '.join(scope_list)}"
         return True, None
     if response.status_code == 404:
         return False, f"Repository {owner}/{repo} not found"
     if response.status_code in (401, 403):
+        scopes = response.headers.get("X-OAuth-Scopes", "")
+        if scopes:
+            return False, f"PAT is valid but lacks permissions for this repository. Current scopes: {scopes}"
         return False, "Invalid PAT or insufficient permissions"
     return False, f"GitHub API error: {response.status_code}"
 

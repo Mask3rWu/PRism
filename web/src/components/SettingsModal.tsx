@@ -11,14 +11,18 @@ interface Props {
 export default function SettingsModal({ open, onClose }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasPat, setHasPat] = useState(false);
+  const [verifiedPat, setVerifiedPat] = useState("");
 
   useEffect(() => {
     if (!open) {
       setError("");
       setLoading(false);
+      setVerifying(false);
+      setVerifiedPat("");
       return;
     }
 
@@ -30,27 +34,55 @@ export default function SettingsModal({ open, onClose }: Props) {
       .finally(() => setStatusLoading(false));
   }, [open]);
 
+  const handleVerify = useCallback(async () => {
+    const form = formRef.current;
+    if (!form) return;
+    const data = new FormData(form);
+    const pat = (data.get("pat") as string).trim();
+
+    if (!pat) {
+      setError("Please enter a PAT first");
+      return;
+    }
+
+    setVerifying(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/settings/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pat }),
+      });
+
+      if (res.ok) {
+        setVerifiedPat(pat);
+        setError("");
+      } else {
+        const body = await res.json();
+        setError(body.detail || "Verification failed");
+        setVerifiedPat("");
+      }
+    } catch {
+      setError("Network error. Is the backend running?");
+    } finally {
+      setVerifying(false);
+    }
+  }, []);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
+      if (!verifiedPat) return;
+
       setLoading(true);
       setError("");
-
-      const form = e.currentTarget;
-      const data = new FormData(form);
-      const pat = (data.get("pat") as string).trim();
-
-      if (!pat) {
-        setError("PAT is required");
-        setLoading(false);
-        return;
-      }
 
       try {
         const res = await fetch("/api/settings", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pat }),
+          body: JSON.stringify({ pat: verifiedPat }),
         });
 
         if (!res.ok) {
@@ -58,7 +90,8 @@ export default function SettingsModal({ open, onClose }: Props) {
           setError(body.detail || "Failed to save PAT");
         } else {
           setHasPat(true);
-          form.reset();
+          formRef.current?.reset();
+          setVerifiedPat("");
           onClose();
         }
       } catch {
@@ -67,7 +100,7 @@ export default function SettingsModal({ open, onClose }: Props) {
         setLoading(false);
       }
     },
-    [onClose],
+    [onClose, verifiedPat],
   );
 
   if (!open) return null;
@@ -99,13 +132,29 @@ export default function SettingsModal({ open, onClose }: Props) {
                   : "No PAT configured. A token is required to access GitHub repositories."}
               </p>
             )}
-            <input
-              name="pat"
-              type="password"
-              required
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="ghp_..."
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                name="pat"
+                type="password"
+                required
+                onChange={() => setVerifiedPat("")}
+                className="flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                placeholder="ghp_..."
+              />
+              <button
+                type="button"
+                onClick={handleVerify}
+                disabled={verifying}
+                className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950"
+              >
+                {verifying ? "Verifying..." : "Verify"}
+              </button>
+            </div>
+            {verifiedPat && (
+              <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                Token verified successfully.
+              </p>
+            )}
             <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
               <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
                 How to get a token:
@@ -140,8 +189,9 @@ export default function SettingsModal({ open, onClose }: Props) {
           )}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !verifiedPat}
             className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            title={!verifiedPat ? "Please verify your token first" : ""}
           >
             {loading ? "Saving..." : "Save"}
           </button>

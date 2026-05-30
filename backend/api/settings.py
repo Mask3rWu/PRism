@@ -26,6 +26,14 @@ def get_settings(db: Session = Depends(get_db)):
     return SettingsResponse(has_pat=bool(s.encrypted_pat))
 
 
+@router.post("/verify")
+async def verify_pat(body: SettingsUpdate):
+    is_valid, error = await validate_pat_global(body.pat)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error)
+    return {"valid": True}
+
+
 @router.put("", response_model=SettingsResponse)
 async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     is_valid, error = await validate_pat_global(body.pat)
