@@ -31,11 +31,17 @@ export default function ProjectCard({
   onSelect,
 }: Props) {
   const [favLoading, setFavLoading] = useState(false);
-  const created = new Date(project.created_at).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  const updated = project.last_synced_at
+    ? (() => {
+        const d = new Date(project.last_synced_at);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const h = String(d.getHours()).padStart(2, "0");
+        const min = String(d.getMinutes()).padStart(2, "0");
+        return `Updated: ${y}/${m}/${day} ${h}:${min}`;
+      })()
+    : null;
 
   const tags: string[] = project.tags ?? [];
   const visibleTags = tags.slice(0, 3);
@@ -160,15 +166,13 @@ export default function ProjectCard({
       </div>
 
       {/* Description */}
-      {project.description && (
-        <p className={`mt-2 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2 ${selectMode ? "ml-6" : ""}`}>
-          {project.description}
-        </p>
-      )}
+      <p className={`mt-2 text-sm text-zinc-600 dark:text-zinc-400 line-clamp-1 ${selectMode ? "ml-6" : ""}`}>
+        {project.description || " "}
+      </p>
 
-      {/* Created date */}
-      <p className={`mt-3 text-xs text-zinc-400 dark:text-zinc-500 ${selectMode ? "ml-6" : ""}`}>
-        Created {created}
+      {/* Updated date */}
+      <p className={`mt-2 text-xs text-zinc-400 dark:text-zinc-500 ${selectMode ? "ml-6" : ""}`}>
+        {updated ?? " "}
       </p>
     </div>
   );
