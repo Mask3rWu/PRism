@@ -7,3 +7,4 @@ scripts/
 backend/.env
 __pycache__/
 *.db
+plan.md
