@@ -16,14 +16,43 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Edit mode state
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+
   const isEdit = !!project;
 
   useEffect(() => {
     if (!open) {
       setError("");
       setLoading(false);
+      setEditTags([]);
+      setTagInput("");
+      return;
     }
-  }, [open]);
+    if (project) {
+      setEditTags([...(project.tags ?? [])]);
+    }
+  }, [open, project]);
+
+  const addTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !editTags.includes(trimmed)) {
+      setEditTags((prev) => [...prev, trimmed]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (tag: string) => {
+    setEditTags((prev) => prev.filter((t) => t !== tag));
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addTag();
+    }
+  };
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -36,13 +65,28 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
 
       try {
         if (isEdit && project) {
+          const name = (data.get("name") as string).trim();
           const desc = (data.get("description") as string).trim();
-          if (desc === (project.description ?? "")) {
+
+          if (!name) {
+            setError("Project name cannot be empty");
+            setLoading(false);
+            return;
+          }
+
+          const payload: ProjectUpdatePayload = {};
+          if (name !== project.name) payload.name = name;
+          if (desc !== (project.description ?? "")) payload.description = desc;
+
+          const tagsChanged =
+            JSON.stringify(editTags) !== JSON.stringify(project.tags ?? []);
+          if (tagsChanged) payload.tags = editTags;
+
+          if (Object.keys(payload).length === 0) {
             setError("No changes to save");
             setLoading(false);
             return;
           }
-          const payload: ProjectUpdatePayload = { description: desc };
 
           const res = await fetch(`/api/projects/${project.id}`, {
             method: "PUT",
@@ -87,7 +131,7 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
         setLoading(false);
       }
     },
-    [isEdit, onClose, project, router],
+    [isEdit, onClose, project, editTags, router],
   );
 
   if (!open) return null;
@@ -112,9 +156,11 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Project Name
                 </label>
-                <p className="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                  {project!.name}
-                </p>
+                <input
+                  name="name"
+                  defaultValue={project!.name}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -123,6 +169,36 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                   {project!.repo_owner}/{project!.repo_name}
                 </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Tags
+                </label>
+                <div className="mt-1 flex flex-wrap items-center gap-1 rounded-lg border border-zinc-300 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
+                  {editTags.map((t) => (
+                    <span
+                      key={t}
+                      className="inline-flex items-center gap-0.5 rounded-md bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                    >
+                      {t}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(t)}
+                        className="ml-0.5 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
+                    placeholder={editTags.length === 0 ? "Add tag... (press Enter)" : "Add..."}
+                    className="min-w-[80px] flex-1 bg-transparent px-1 py-0.5 text-sm text-zinc-900 outline-none dark:text-zinc-100"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">

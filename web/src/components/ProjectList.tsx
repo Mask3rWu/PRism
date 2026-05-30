@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProjectCard from "@/components/ProjectCard";
 import AddProjectModal from "@/components/AddProjectModal";
 import AddRepoModal from "@/components/AddRepoModal";
@@ -14,11 +14,15 @@ export default function ProjectList({
   initialTotal: number;
 }) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [total, setTotal] = useState(initialTotal);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [selectedTag, setSelectedTag] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const perPage = 12;
 
   // Delete state
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -27,27 +31,57 @@ export default function ProjectList({
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const handleRefresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/projects?per_page=100");
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-      setProjects(data.items ?? []);
-      setFetchError("");
-    } catch {
-      setFetchError("Could not load projects. Is the backend running?");
-    }
-  }, []);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchProjects = useCallback(
+    async (searchTerm: string, tagFilter: string, currentPage: number) => {
+      try {
+        const params = new URLSearchParams();
+        if (searchTerm) params.set("search", searchTerm);
+        if (tagFilter) params.set("tag", tagFilter);
+        params.set("page", String(currentPage));
+        params.set("per_page", String(perPage));
+
+        const res = await fetch(`/api/projects?${params}`);
+        if (!res.ok) throw new Error("Failed");
+        const data = await res.json();
+        setProjects(data.items ?? []);
+        setTotal(data.total ?? 0);
+        setFetchError("");
+      } catch {
+        setFetchError("Could not load projects. Is the backend running?");
+      }
+    },
+    [],
+  );
+
+  // Debounced search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      fetchProjects(search, selectedTag, 1);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search]);
+
+  // Tag or page change — fetch immediately
+  useEffect(() => {
+    // Skip initial render since we already have data
+    const isInitial =
+      search === "" && selectedTag === "" && page === 1 &&
+      projects === initialProjects;
+    if (isInitial) return;
+    fetchProjects(search, selectedTag, page);
+  }, [selectedTag, page]);
 
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
     projects.forEach((p) => (p.tags ?? []).forEach((t) => tagSet.add(t)));
     return Array.from(tagSet).sort();
   }, [projects]);
-
-  const filteredProjects = selectedTag
-    ? projects.filter((p) => (p.tags ?? []).includes(selectedTag))
-    : projects;
 
   const openEditModal = (project: Project) => {
     setEditingProject(project);
@@ -57,22 +91,21 @@ export default function ProjectList({
   const closeEditModal = () => {
     setEditModalOpen(false);
     setEditingProject(null);
-    handleRefresh();
+    fetchProjects(search, selectedTag, page);
   };
 
   const closeAddRepo = () => {
     setAddRepoOpen(false);
-    handleRefresh();
+    fetchProjects(search, selectedTag, page);
   };
 
-  // Delete handlers
   const handleSingleDelete = async () => {
     if (confirmDeleteId === null) return;
     setDeleting(true);
     try {
       await fetch(`/api/projects/${confirmDeleteId}`, { method: "DELETE" });
       setConfirmDeleteId(null);
-      handleRefresh();
+      fetchProjects(search, selectedTag, page);
     } catch {
       setFetchError("Failed to delete project.");
     } finally {
@@ -93,7 +126,7 @@ export default function ProjectList({
       setSelectedIds(new Set());
       setSelectMode(false);
       setConfirmBatchDelete(false);
-      handleRefresh();
+      fetchProjects(search, selectedTag, page);
     } catch {
       setFetchError("Failed to delete projects.");
     } finally {
@@ -116,7 +149,9 @@ export default function ProjectList({
     setConfirmBatchDelete(false);
   };
 
-  const hasProjects = projects.length > 0;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+  const hasProjects = projects.length > 0 || total > 0;
   const deleteConfirmProject = confirmDeleteId !== null
     ? projects.find((p) => p.id === confirmDeleteId)
     : null;
@@ -168,9 +203,22 @@ export default function ProjectList({
         </div>
       </div>
 
+      {/* Search bar */}
+      {hasProjects && (
+        <div className="mt-4">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search projects..."
+            className="w-full max-w-sm rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+          />
+        </div>
+      )}
+
       {/* Tag filter bar */}
       {allTags.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-zinc-400 dark:text-zinc-500">Tags:</span>
           {allTags.map((t) => (
             <button
@@ -217,27 +265,54 @@ export default function ProjectList({
         </div>
       )}
 
-      {hasProjects && filteredProjects.length === 0 && (
+      {hasProjects && projects.length === 0 && (
         <p className="mt-8 text-center text-sm text-zinc-400">
-          No projects match the selected tag.
+          No projects match the current filters.
         </p>
       )}
 
-      {hasProjects && filteredProjects.length > 0 && (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onEdit={openEditModal}
-              onChange={handleRefresh}
-              onDelete={(id) => setConfirmDeleteId(id)}
-              selectMode={selectMode}
-              selected={selectedIds.has(project.id)}
-              onSelect={handleSelectToggle}
-            />
-          ))}
-        </div>
+      {projects.length > 0 && (
+        <>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {projects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onEdit={openEditModal}
+                onChange={() => fetchProjects(search, selectedTag, page)}
+                onDelete={(id) => setConfirmDeleteId(id)}
+                selectMode={selectMode}
+                selected={selectedIds.has(project.id)}
+                onSelect={handleSelectToggle}
+              />
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                Page {page} of {totalPages} ({total} projects)
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Single delete confirmation modal */}
