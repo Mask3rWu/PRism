@@ -94,8 +94,26 @@ function getContrastColor(hex: string): string {
   return luminance > 0.6 ? "#1a1a1a" : "#ffffff";
 }
 
-function prStateIcon(pr: PullRequestItem): string | null {
-  if (pr.state === "open" || !pr.state) return null;
+const PR_STATE_ICONS = {
+  open: {
+    color: "#1a7f37",
+    label: "Open Pull Request",
+    path: "M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z",
+  },
+  closed: {
+    color: "#cf222e",
+    label: "Closed Pull Request",
+    path: "M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 5.5a.75.75 0 0 1 .75.75v3.378a2.251 2.251 0 1 1-1.5 0V7.25a.75.75 0 0 1 .75-.75Zm-2.03-5.273a.75.75 0 0 1 1.06 0l.97.97.97-.97a.748.748 0 0 1 1.265.332.75.75 0 0 1-.205.729l-.97.97.97.97a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-.97-.97-.97.97a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l.97-.97-.97-.97a.75.75 0 0 1 0-1.06ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z",
+  },
+  merged: {
+    color: "#8250df",
+    label: "Merged Pull Request",
+    path: "M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 3.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z",
+  },
+} as const;
+
+function prStateType(pr: PullRequestItem): keyof typeof PR_STATE_ICONS | null {
+  if (pr.state === "open" || !pr.state) return "open";
   return pr.merged_at ? "merged" : "closed";
 }
 
@@ -348,19 +366,22 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
       <div className="mb-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* State tabs */}
-          <div className="inline-flex rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
+          <div className="flex items-center gap-1">
             {(["open", "closed"] as const).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => { setStateFilter(s); setTimeout(() => loadPage(1), 0); }}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`relative px-3 py-1.5 text-sm font-medium transition-colors ${
                   stateFilter === s
-                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                    ? "text-zinc-900 dark:text-zinc-100"
                     : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                 }`}
               >
                 {s === "open" ? "Open" : "Closed"}
+                {stateFilter === s && (
+                  <span className="absolute bottom-0 left-1/2 h-0.5 w-4/5 -translate-x-1/2 rounded-full bg-indigo-500" />
+                )}
               </button>
             ))}
           </div>
@@ -479,12 +500,20 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
       </div>
 
       {/* PR List */}
-      {prs.length === 0 ? (
-        <p className="py-8 text-center text-sm text-zinc-500">
-          No pull requests found.
+      {loadingPage && prs.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 py-12 text-sm text-zinc-400">
+          <svg className="size-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Loading pull requests…
+        </div>
+      ) : prs.length === 0 ? (
+        <p className="py-12 text-center text-sm text-zinc-500">
+          No {stateFilter} pull requests found.
         </p>
       ) : (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <div className={`rounded-xl border border-zinc-200 dark:border-zinc-800 ${loadingPage ? "pointer-events-none opacity-50" : ""}`}>
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {prs.map((pr) => {
               const status = STATUS_CONFIG[pr.review_status];
@@ -492,7 +521,8 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
               const triggering = triggeringPRs.has(pr.pr_number);
               const stage = reviewStages[pr.pr_number];
               const reviewError = reviewErrors[pr.pr_number];
-              const stateIcon = prStateIcon(pr);
+              const stateType = prStateType(pr);
+              const stateIconData = stateType ? PR_STATE_ICONS[stateType] : null;
 
               const githubUrl = `https://github.com/${project.repo_owner}/${project.repo_name}/pull/${pr.pr_number}`;
 
@@ -503,25 +533,12 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
                 >
                   {/* Row 1 */}
                   <div className="flex items-center gap-2 px-4 pt-3">
-                    {/* State icon for closed PRs */}
-                    {stateIcon && (
-                      <span
-                        className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                          stateIcon === "merged"
-                            ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
-                            : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
-                        {stateIcon === "merged" ? (
-                          <svg className="size-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                          </svg>
-                        ) : (
-                          <svg className="size-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                        {stateIcon}
+                    {/* PR state icon */}
+                    {stateIconData && (
+                      <span className="shrink-0" title={stateIconData.label}>
+                        <svg className="size-4" viewBox="0 0 16 16" fill={stateIconData.color}>
+                          <path d={stateIconData.path} />
+                        </svg>
                       </span>
                     )}
                     {/* Draft badge */}
