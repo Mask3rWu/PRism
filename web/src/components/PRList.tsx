@@ -125,6 +125,20 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Refs for latest filter values — avoids stale closure in setTimeout callbacks
+  const stateFilterRef = useRef(stateFilter);
+  stateFilterRef.current = stateFilter;
+  const sortValueRef = useRef(sortValue);
+  sortValueRef.current = sortValue;
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const authorRef = useRef(author);
+  authorRef.current = author;
+  const selectedLabelsRef = useRef(selectedLabels);
+  selectedLabelsRef.current = selectedLabels;
+  const prStatusFilterRef = useRef(prStatusFilter);
+  prStatusFilterRef.current = prStatusFilter;
+
   const stopPolling = useCallback(() => {
     if (intervalRef.current !== null) {
       clearInterval(intervalRef.current);
@@ -215,19 +229,30 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
     };
   }, [authorInput]);
 
+  // Reload when debounced search/author settle
+  const filterMountedRef = useRef(false);
+  useEffect(() => {
+    if (!filterMountedRef.current) {
+      filterMountedRef.current = true;
+      return;
+    }
+    loadPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, author]);
+
   function buildQueryParams(newPage: number): string {
-    const [sort, direction] = sortValue.split("-");
+    const [sort, direction] = sortValueRef.current.split("-");
     const params = new URLSearchParams({
       page: String(newPage),
       per_page: String(perPage),
-      state: stateFilter,
-      search,
-      author,
+      state: stateFilterRef.current,
+      search: searchRef.current,
+      author: authorRef.current,
       sort,
       direction,
     });
-    selectedLabels.forEach((l) => params.append("labels", l));
-    prStatusFilter.forEach((s) => params.append("pr_status", s));
+    selectedLabelsRef.current.forEach((l) => params.append("labels", l));
+    prStatusFilterRef.current.forEach((s) => params.append("pr_status", s));
     return params.toString();
   }
 
@@ -250,11 +275,6 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
     } finally {
       setLoadingPage(false);
     }
-  }
-
-  // Reload when filters change (except searchInput/authorInput which are debounced)
-  function applyFilters() {
-    loadPage(1);
   }
 
   async function triggerReview(prNumber: number) {
