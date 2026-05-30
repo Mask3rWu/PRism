@@ -23,6 +23,15 @@ export interface Settings {
   has_pat: boolean;
 }
 
+export interface GitHubRepoItem {
+  full_name: string;
+  owner: string;
+  name: string;
+  private: boolean;
+  description: string | null;
+  html_url: string;
+}
+
 export interface PullRequestItem {
   pr_number: number;
   title: string;

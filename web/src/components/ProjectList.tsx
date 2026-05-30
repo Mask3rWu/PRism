@@ -3,12 +3,14 @@
 import { useState } from "react";
 import ProjectCard from "@/components/ProjectCard";
 import AddProjectModal from "@/components/AddProjectModal";
+import AddRepoModal from "@/components/AddRepoModal";
 import type { Project } from "@/types";
 
 export default function ProjectList({ initialProjects }: { initialProjects: Project[] }) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
   const handleRefresh = async () => {
@@ -22,19 +24,19 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
     }
   };
 
-  const openAddModal = () => {
-    setEditingProject(null);
-    setModalOpen(true);
-  };
-
   const openEditModal = (project: Project) => {
     setEditingProject(project);
-    setModalOpen(true);
+    setEditModalOpen(true);
   };
 
-  const closeModal = () => {
-    setModalOpen(false);
+  const closeEditModal = () => {
+    setEditModalOpen(false);
     setEditingProject(null);
+    handleRefresh();
+  };
+
+  const closeAddRepo = () => {
+    setAddRepoOpen(false);
     handleRefresh();
   };
 
@@ -48,10 +50,10 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
         </h1>
         <button
           type="button"
-          onClick={openAddModal}
+          onClick={() => setAddRepoOpen(true)}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
         >
-          Add Project
+          Add Repository
         </button>
       </div>
 
@@ -66,10 +68,10 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
           </p>
           <button
             type="button"
-            onClick={openAddModal}
+            onClick={() => setAddRepoOpen(true)}
             className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
           >
-            Add your first project
+            Add your first repository
           </button>
         </div>
       )}
@@ -87,9 +89,15 @@ export default function ProjectList({ initialProjects }: { initialProjects: Proj
       )}
 
       <AddProjectModal
-        open={modalOpen}
-        onClose={closeModal}
+        open={editModalOpen}
+        onClose={closeEditModal}
         project={editingProject}
+      />
+      <AddRepoModal
+        open={addRepoOpen}
+        initialTab="personal"
+        onClose={closeAddRepo}
+        existingRepos={new Set(projects.map((p) => `${p.repo_owner}/${p.repo_name}`))}
       />
     </div>
   );

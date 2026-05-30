@@ -15,6 +15,16 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 @router.post("", response_model=ProjectResponse, status_code=201)
 async def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
+    existing = db.query(Project).filter(
+        Project.repo_owner == body.repo_owner,
+        Project.repo_name == body.repo_name,
+    ).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Repository {body.repo_owner}/{body.repo_name} is already added as '{existing.name}'.",
+        )
+
     project = Project(
         name=body.name,
         repo_owner=body.repo_owner,

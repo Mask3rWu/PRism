@@ -160,3 +160,47 @@ async def get_repo(owner: str, repo: str) -> dict | None:
         except httpx.RequestError:
             pass
     return None
+
+
+async def list_user_repos(per_page: int = 100) -> list[dict] | None:
+    """Fetch the authenticated user's repositories from GitHub."""
+    pat = _get_decrypted_pat()
+    if not pat:
+        return None
+    url = "https://api.github.com/user/repos"
+    params = {"type": "owner", "sort": "updated", "per_page": per_page}
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            if response.status_code == 200:
+                return response.json()
+        except httpx.RequestError:
+            pass
+    return None
+
+
+async def validate_public_repo(owner: str, repo: str) -> tuple[bool, str | None]:
+    """Check that a repository exists and is public. Returns (is_valid, error_message)."""
+    pat = _get_decrypted_pat()
+    if not pat:
+        return False, "No PAT configured. Please set a PAT in Settings first."
+
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+        except httpx.RequestError:
+            return False, "Failed to connect to GitHub API"
+
+    if response.status_code == 200:
+        data = response.json()
+        if data.get("private", True):
+            return False, "This is a private repository. Use 'Add Personal Repo' instead."
+        return True, None
+    if response.status_code == 404:
+        return False, f"Repository {owner}/{repo} not found"
+    return False, f"GitHub API error: {response.status_code}"
