@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PaginatedPRs, Project } from "@/types";
 import PRList from "@/components/PRList";
+import ProjectStatsBar from "@/components/ProjectStatsBar";
 
 const BACKEND = "http://localhost:8000";
 
@@ -87,36 +88,35 @@ export default async function ProjectDetailPage({ params }: Props) {
         Back
       </Link>
 
-      <div className="mt-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          {project.name}
-        </h1>
-        <div className="mt-1 flex items-center gap-3">
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            {project.repo_owner}/{project.repo_name}
-          </span>
-          {project.description && (
-            <>
-              <span className="text-zinc-300 dark:text-zinc-700">·</span>
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                {project.description}
-              </span>
-            </>
-          )}
+      <div className="mt-4 flex items-start justify-between gap-8">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-semibold text-zinc-900 dark:text-zinc-100">
+            {project.name}
+          </h1>
+          <div className="mt-1 flex items-center gap-3">
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+              {project.repo_owner}/{project.repo_name}
+            </span>
+            {project.description && (
+              <>
+                <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {project.description}
+                </span>
+              </>
+            )}
+          </div>
         </div>
+        <ProjectStatsBar projectId={project.id} initialStats={prData.review_stats} />
       </div>
 
       <div className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Pull Requests
-        </h2>
         <PRList
           project={project}
           initialPRs={prData.items}
           initialTotal={prData.total}
           initialPage={page}
           perPage={perPage}
-          initialReviewStats={prData.review_stats}
         />
       </div>
     </div>

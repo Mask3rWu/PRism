@@ -27,8 +27,9 @@ class PullRequestItem(BaseModel):
 
 class ReviewStats(BaseModel):
     total: int
-    reviewed: int
-    not_reviewed: int
+    succeeded: int
+    failed: int
+    in_progress: int
 
 
 class PaginatedPRResponse(BaseModel):

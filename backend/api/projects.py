@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
@@ -11,7 +11,7 @@ from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsRespons
 from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem, ReviewStats
 from backend.schemas.review import ReviewResponse
 from backend.seed import SEED_PR_LISTS
-from backend.services.github.client import count_pulls, fetch_pr_detail, fetch_pulls, search_pulls
+from backend.services.github.client import fetch_pr_detail, fetch_pulls, search_pulls
 from backend.services.review.service import _run_review_background
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -155,6 +155,40 @@ def _filter_by_pr_status(items: list[PullRequestItem], pr_status: list[str]) -> 
     return [it for it in items if it.review_status in pr_status]
 
 
+def _compute_review_stats(project: Project, db: Session) -> ReviewStats:
+    """Compute review stats purely from local DB — counts distinct PRs by their latest review status."""
+
+    subq = (
+        db.query(Review.pr_number, func.max(Review.created_at).label("max_created"))
+        .filter(Review.project_id == project.id)
+        .group_by(Review.pr_number)
+        .subquery()
+    )
+    latest_reviews = (
+        db.query(Review)
+        .join(
+            subq,
+            and_(
+                Review.pr_number == subq.c.pr_number,
+                Review.created_at == subq.c.max_created,
+            ),
+        )
+        .filter(Review.project_id == project.id)
+        .all()
+    )
+
+    succeeded = sum(1 for r in latest_reviews if r.status == ReviewStatus.succeeded)
+    failed = sum(1 for r in latest_reviews if r.status == ReviewStatus.failed)
+    in_progress = sum(1 for r in latest_reviews if r.status in (ReviewStatus.queued, ReviewStatus.running))
+
+    return ReviewStats(
+        total=succeeded + failed + in_progress,
+        succeeded=succeeded,
+        failed=failed,
+        in_progress=in_progress,
+    )
+
+
 @router.get("/{project_id}/pulls", response_model=PaginatedPRResponse)
 async def list_pull_requests(
     project_id: int,
@@ -227,22 +261,7 @@ async def list_pull_requests(
     items = _filter_by_pr_status(items, pr_status)
 
     # Compute review stats (total across all PRs, not just current page/filter)
-    reviewed_count = db.query(func.count(func.distinct(Review.pr_number))).filter(
-        Review.project_id == project_id,
-    ).scalar() or 0
-
-    if project.is_seeded:
-        all_seed = SEED_PR_LISTS.get(project.id, [])
-        total_prs = len(all_seed)
-    else:
-        gh_counts = await count_pulls(project.repo_owner, project.repo_name)
-        total_prs = sum(gh_counts.values()) if gh_counts else 0
-
-    stats = ReviewStats(
-        total=total_prs,
-        reviewed=reviewed_count,
-        not_reviewed=max(0, total_prs - reviewed_count),
-    )
+    stats = _compute_review_stats(project, db)
 
     return PaginatedPRResponse(
         items=items,
@@ -251,6 +270,17 @@ async def list_pull_requests(
         per_page=per_page,
         review_stats=stats,
     )
+
+
+@router.get("/{project_id}/review-stats", response_model=ReviewStats)
+async def get_review_stats(
+    project_id: int,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return _compute_review_stats(project, db)
 
 
 @router.post("/{project_id}/pulls/{pr_number}/review", response_model=ReviewResponse, status_code=202)

@@ -70,8 +70,9 @@ export interface PullRequestItem {
 
 export interface ReviewStats {
   total: number;
-  reviewed: number;
-  not_reviewed: number;
+  succeeded: number;
+  failed: number;
+  in_progress: number;
 }
 
 export interface PaginatedPRs {
