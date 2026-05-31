@@ -600,7 +600,14 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
         <div className={`rounded-xl border border-zinc-200 dark:border-zinc-800 ${loadingPage ? "pointer-events-none opacity-50" : ""}`}>
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {prs.map((pr) => {
-              const status = STATUS_CONFIG[pr.review_status];
+              const status =
+                pr.review_status === "succeeded" && pr.comment_posted
+                  ? {
+                      label: "Reviewed & Commented",
+                      className:
+                        "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+                    }
+                  : STATUS_CONFIG[pr.review_status];
               const active = isReviewActive(pr.review_status);
               const triggering = triggeringPRs.has(pr.pr_number);
               const stage = reviewStages[pr.pr_number];
