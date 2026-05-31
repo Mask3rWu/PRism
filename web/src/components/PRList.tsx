@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Project, PullRequestItem, PaginatedPRs, ReviewStatusResponse } from "@/types";
 
 interface Props {
@@ -118,9 +120,13 @@ function prStateType(pr: PullRequestItem): keyof typeof PR_STATE_ICONS | null {
 }
 
 export default function PRList({ project, initialPRs, initialTotal, initialPage, perPage }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Initialize filter state from URL search params
   const [prs, setPRs] = useState<PullRequestItem[]>(initialPRs);
   const [total, setTotal] = useState(initialTotal);
-  const [page, setPage] = useState(initialPage);
+  const [page, setPage] = useState(() => parseInt(searchParams.get("page") || String(initialPage)));
   const [loadingPage, setLoadingPage] = useState(false);
   const [triggeringPRs, setTriggeringPRs] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -128,20 +134,40 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
   const [reviewErrors, setReviewErrors] = useState<Record<number, string | null>>({});
 
   // Filter state
-  const [stateFilter, setStateFilter] = useState<"open" | "closed">("open");
-  const [sortValue, setSortValue] = useState("created-desc");
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [author, setAuthor] = useState("");
-  const [authorInput, setAuthorInput] = useState("");
-  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [prStatusFilter, setPrStatusFilter] = useState<string[]>([]);
+  const [stateFilter, setStateFilter] = useState<"open" | "closed">(
+    () => (searchParams.get("state") as "open" | "closed") || "open"
+  );
+  const [sortValue, setSortValue] = useState(() => searchParams.get("sort") || "created-desc");
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("search") || "");
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
+  const [author, setAuthor] = useState(() => searchParams.get("author") || "");
+  const [authorInput, setAuthorInput] = useState(() => searchParams.get("author") || "");
+  const [selectedLabels, setSelectedLabels] = useState<string[]>(
+    () => searchParams.get("labels")?.split(",").filter(Boolean) || []
+  );
+  const [prStatusFilter, setPrStatusFilter] = useState<string[]>(
+    () => searchParams.get("pr_status")?.split(",").filter(Boolean) || []
+  );
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+
+  // Sync filter state to URL
+  const syncFilters = useCallback(() => {
+    const params = new URLSearchParams();
+    if (stateFilterRef.current !== "open") params.set("state", stateFilterRef.current);
+    if (sortValueRef.current !== "created-desc") params.set("sort", sortValueRef.current);
+    if (searchRef.current) params.set("search", searchRef.current);
+    if (authorRef.current) params.set("author", authorRef.current);
+    if (selectedLabelsRef.current.length) params.set("labels", selectedLabelsRef.current.join(","));
+    if (prStatusFilterRef.current.length) params.set("pr_status", prStatusFilterRef.current.join(","));
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+  }, [router]);
 
   const pollingRef = useRef<Record<number, number>>({});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(false);
 
   // Refs for latest filter values — avoids stale closure in setTimeout callbacks
   const stateFilterRef = useRef(stateFilter);
@@ -294,6 +320,15 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
       setLoadingPage(false);
     }
   }
+
+  // Sync filter state to URL (skip initial mount)
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    syncFilters();
+  }, [stateFilter, sortValue, search, author, selectedLabels, prStatusFilter, page, syncFilters]);
 
   async function triggerReview(prNumber: number) {
     setTriggeringPRs((prev) => new Set(prev).add(prNumber));
@@ -556,9 +591,18 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
                       </span>
                     )}
                     {/* Title */}
-                    <span className="min-w-0 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {pr.title}
-                    </span>
+                    {pr.review_id && (pr.review_status === "succeeded" || pr.review_status === "failed") ? (
+                      <Link
+                        href={`/reviews/${pr.review_id}`}
+                        className="min-w-0 truncate text-sm font-medium text-zinc-900 hover:text-indigo-600 dark:text-zinc-100 dark:hover:text-indigo-400 transition-colors"
+                      >
+                        {pr.title}
+                      </Link>
+                    ) : (
+                      <span className="min-w-0 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {pr.title}
+                      </span>
+                    )}
                     {/* Labels */}
                     {pr.labels.map((lb) => (
                       <span
@@ -619,11 +663,20 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
                     <div className="flex-1" />
                     {/* Review status */}
                     <div className="flex shrink-0 items-center gap-1">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}
-                      >
-                        {status.label}
-                      </span>
+                      {pr.review_id && (pr.review_status === "succeeded" || pr.review_status === "failed") ? (
+                        <Link
+                          href={`/reviews/${pr.review_id}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80 ${status.className}`}
+                        >
+                          {status.label}
+                        </Link>
+                      ) : (
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}
+                        >
+                          {status.label}
+                        </span>
+                      )}
                       {active && stage && (
                         <span className="animate-pulse text-zinc-400 dark:text-zinc-500">
                           {stageLabel(stage)}
