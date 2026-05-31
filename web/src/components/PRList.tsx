@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type { Project, PullRequestItem, PaginatedPRs, ReviewStatusResponse } from "@/types";
 
 interface Props {
@@ -120,7 +120,6 @@ function prStateType(pr: PullRequestItem): keyof typeof PR_STATE_ICONS | null {
 }
 
 export default function PRList({ project, initialPRs, initialTotal, initialPage, perPage }: Props) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Initialize filter state from URL search params
@@ -150,7 +149,7 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
   );
   const [showMoreFilters, setShowMoreFilters] = useState(false);
 
-  // Sync filter state to URL
+  // Sync filter state to URL (uses History API directly to avoid Next.js router re-render loop)
   const syncFilters = useCallback(() => {
     const params = new URLSearchParams();
     if (stateFilterRef.current !== "open") params.set("state", stateFilterRef.current);
@@ -160,8 +159,9 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
     if (selectedLabelsRef.current.length) params.set("labels", selectedLabelsRef.current.join(","));
     if (prStatusFilterRef.current.length) params.set("pr_status", prStatusFilterRef.current.join(","));
     const qs = params.toString();
-    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
-  }, [router]);
+    const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", url);
+  }, []);
 
   const pollingRef = useRef<Record<number, number>>({});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
