@@ -17,6 +17,16 @@ async function getReview(id: string): Promise<ReviewDetail | null> {
   }
 }
 
+async function getProject(projectId: number): Promise<{ permission: string } | null> {
+  try {
+    const res = await fetch(`${BACKEND}/api/projects/${projectId}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -24,6 +34,7 @@ interface Props {
 export default async function ReviewDetailPage({ params }: Props) {
   const { id } = await params;
   const review = await getReview(id);
+  const project = review ? await getProject(review.project_id) : null;
 
   if (!review) {
     return (
@@ -51,7 +62,7 @@ export default async function ReviewDetailPage({ params }: Props) {
         className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
       />
 
-      <ReviewResult review={review} />
+      <ReviewResult review={review} projectPermission={project?.permission} />
     </div>
   );
 }

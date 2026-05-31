@@ -13,7 +13,7 @@ type Tab = "general" | "pat" | "llm";
 export default function SettingsModal({ open, onClose }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const llmFormRef = useRef<HTMLFormElement>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("pat");
+  const [activeTab, setActiveTab] = useState<Tab>("general");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [llmVerifying, setLlmVerifying] = useState(false);
@@ -333,7 +333,7 @@ export default function SettingsModal({ open, onClose }: Props) {
         {activeTab === "general" && (
           <div className="mt-4 space-y-4">
             <div>
-              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Agent</h3>
+              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Language</h3>
               <div className="mt-2 flex items-center justify-between">
                 <label className="text-sm text-zinc-600 dark:text-zinc-400">
                   Output Language
@@ -347,6 +347,48 @@ export default function SettingsModal({ open, onClose }: Props) {
                   <option value="zh">中文</option>
                   <option value="en">English</option>
                 </select>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Review Agents</h3>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                Select which agents to run during review. Summary and Comment Compose are always on.
+              </p>
+              <div className="mt-3 space-y-2">
+                {([
+                  { key: "risk_analysis", label: "Risk Analysis", desc: "Identify potential risks in code changes" },
+                  { key: "issue_detection", label: "Issue Detection", desc: "Detect bugs, logic errors, and code smells" },
+                  { key: "test_suggestions", label: "Test Suggestions", desc: "Suggest test cases for the changes" },
+                ] as const).map((agent) => (
+                  <label key={agent.key} className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={(settings?.enabled_agents || []).includes(agent.key)}
+                      onChange={async (e) => {
+                        const current = settings?.enabled_agents?.length
+                          ? settings.enabled_agents
+                          : ["risk_analysis", "issue_detection", "test_suggestions"];
+                        const updated = e.target.checked
+                          ? [...current, agent.key]
+                          : current.filter((a) => a !== agent.key);
+                        setSettings((prev) => prev ? { ...prev, enabled_agents: updated } : prev);
+                        try {
+                          await fetch("/api/settings", {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ enabled_agents: updated }),
+                          });
+                        } catch { /* ignore */ }
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{agent.label}</span>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">{agent.desc}</p>
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
           </div>

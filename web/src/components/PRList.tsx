@@ -148,6 +148,8 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
     () => searchParams.get("pr_status")?.split(",").filter(Boolean) || []
   );
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [openDropdowns, setOpenDropdowns] = useState<Set<number>>(new Set());
+  const dropdownRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
 
   // Sync filter state to URL (uses History API directly to avoid Next.js router re-render loop)
   const syncFilters = useCallback(() => {
@@ -251,6 +253,21 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
     return () => stopPolling();
   }, [stopPolling]);
 
+  // Click-outside handler for dropdowns
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (openDropdowns.size === 0) return;
+      const target = e.target as Node;
+      let inside = false;
+      dropdownRefs.current.forEach((ref) => {
+        if (ref && ref.contains(target)) inside = true;
+      });
+      if (!inside) setOpenDropdowns(new Set());
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdowns.size]);
+
   // Debounce search
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -330,13 +347,18 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
     syncFilters();
   }, [stateFilter, sortValue, search, author, selectedLabels, prStatusFilter, page, syncFilters]);
 
-  async function triggerReview(prNumber: number) {
+  async function triggerReview(prNumber: number, options?: { write_comment?: boolean }) {
+    const writeComment = options?.write_comment ?? true;
     setTriggeringPRs((prev) => new Set(prev).add(prNumber));
     setError(null);
     try {
       const res = await fetch(
         `/api/projects/${project.id}/pulls/${prNumber}/review`,
-        { method: "POST" }
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ write_comment: writeComment }),
+        }
       );
       if (!res.ok) {
         const data = await res.json();
@@ -365,6 +387,28 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
         return next;
       });
     }
+  }
+
+  async function postComment(prNumber: number, reviewId: number) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/reviews/${reviewId}/retry-writeback`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.detail || "Failed to post comment");
+      }
+    } catch {
+      setError("Failed to post comment");
+    }
+  }
+
+  function toggleDropdown(prNumber: number) {
+    setOpenDropdowns((prev) => {
+      const next = new Set(prev);
+      if (next.has(prNumber)) next.delete(prNumber);
+      else next.add(prNumber);
+      return next;
+    });
   }
 
   const isReviewActive = (status: PullRequestItem["review_status"]) =>
@@ -620,20 +664,108 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
                     <div className="flex-1" />
                     {/* Action buttons */}
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => triggerReview(pr.pr_number)}
-                        disabled={active || triggering}
-                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {triggering
-                          ? "Starting..."
-                          : active
-                          ? "In Progress"
-                          : pr.review_status === "failed"
-                          ? "Retry"
-                          : "Trigger Review"}
-                      </button>
+                      {(() => {
+                        const isPersonal = project.permission !== "Viewer";
+                        const isReviewed = pr.review_status === "succeeded";
+                        const isCommentPosted = pr.comment_posted;
+                        const hasDropdown = isPersonal && (pr.review_status === "none" || isReviewed);
+                        const btnBase = "inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+                        const isOpen = openDropdowns.has(pr.pr_number);
+
+                        if (active || triggering) {
+                          return (
+                            <button type="button" disabled className={`${btnBase} rounded-lg bg-indigo-600`}>
+                              {triggering ? "Starting..." : "In Progress"}
+                            </button>
+                          );
+                        }
+
+                        if (!hasDropdown) {
+                          let label: string;
+                          let action: () => void;
+                          if (pr.review_status === "failed") {
+                            label = "Retry";
+                            action = () => triggerReview(pr.pr_number, { write_comment: isPersonal });
+                          } else if (isReviewed) {
+                            label = "Re-review";
+                            action = () => triggerReview(pr.pr_number, { write_comment: false });
+                          } else {
+                            label = "Review";
+                            action = () => triggerReview(pr.pr_number, { write_comment: false });
+                          }
+                          return (
+                            <button type="button" onClick={action} className={`${btnBase} rounded-lg bg-indigo-600 hover:bg-indigo-700`}>
+                              {label}
+                            </button>
+                          );
+                        }
+
+                        // Split button with dropdown
+                        let mainLabel: string;
+                        let mainAction: () => void;
+                        const dropdownItems: { label: string; action: () => void }[] = [];
+
+                        const needsConfirm = isReviewed && isCommentPosted;
+
+                        if (pr.review_status === "none" || (isReviewed && isCommentPosted)) {
+                          mainLabel = "Review & Comment";
+                          const doReview = () => triggerReview(pr.pr_number, { write_comment: true });
+                          mainAction = needsConfirm
+                            ? () => { if (window.confirm("This will overwrite the previous review result. Continue?")) doReview(); }
+                            : doReview;
+                          dropdownItems.push({
+                            label: "Review Only",
+                            action: needsConfirm
+                              ? () => { if (window.confirm("This will overwrite the previous review result. Continue?")) triggerReview(pr.pr_number, { write_comment: false }); }
+                              : () => triggerReview(pr.pr_number, { write_comment: false }),
+                          });
+                        } else {
+                          mainLabel = "Comment";
+                          mainAction = () => postComment(pr.pr_number, pr.review_id!);
+                          dropdownItems.push(
+                            { label: "Re-review", action: () => triggerReview(pr.pr_number, { write_comment: false }) },
+                            { label: "Re-review & Comment", action: () => triggerReview(pr.pr_number, { write_comment: true }) },
+                          );
+                        }
+
+                        return (
+                          <div
+                            ref={(el) => { dropdownRefs.current.set(pr.pr_number, el); }}
+                            className="relative flex"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => { mainAction(); setOpenDropdowns(new Set()); }}
+                              className={`${btnBase} rounded-l-lg bg-indigo-600 hover:bg-indigo-700`}
+                            >
+                              {mainLabel}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleDropdown(pr.pr_number); }}
+                              className={`${btnBase} rounded-r-lg border-l border-indigo-400 bg-indigo-600 hover:bg-indigo-700 px-2`}
+                            >
+                              <svg className={`size-3 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {isOpen && (
+                              <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                                {dropdownItems.map((item) => (
+                                  <button
+                                    key={item.label}
+                                    type="button"
+                                    onClick={() => { item.action(); toggleDropdown(pr.pr_number); }}
+                                    className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <a
                         href={githubUrl}
                         target="_blank"

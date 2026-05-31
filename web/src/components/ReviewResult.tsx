@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ReviewDetail, IssueItem } from "@/types";
+import type { ReviewDetail, IssueItem, RiskItem, TestSuggestion } from "@/types";
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0,
@@ -130,23 +130,49 @@ function CollapsibleSection({
   );
 }
 
-export default function ReviewResult({ review }: { review: ReviewDetail }) {
+export default function ReviewResult({ review, projectPermission }: { review: ReviewDetail; projectPermission?: string }) {
   const [issueSortAsc, setIssueSortAsc] = useState(false);
+  const [postingComment, setPostingComment] = useState(false);
+  const [commentPosted, setCommentPosted] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  async function handlePostComment() {
+    setPostingComment(true);
+    setCommentError(null);
+    try {
+      const res = await fetch(`/api/reviews/${review.id}/retry-writeback`, { method: "POST" });
+      if (res.ok) {
+        setCommentPosted(true);
+      } else {
+        const data = await res.json();
+        setCommentError(data.detail || "Failed to post comment");
+      }
+    } catch {
+      setCommentError("Failed to post comment");
+    } finally {
+      setPostingComment(false);
+    }
+  }
+
+  const canComment = projectPermission && projectPermission !== "Viewer" && review.status === "succeeded" && review.comment_content && !(review.write_comment && !review.writeback_error);
 
   // Normalize LLM field name variations
   const summaryResult = review.summary_result && {
     ...review.summary_result,
     files_changed: review.summary_result.files_changed ?? [],
   };
-  const riskResult = review.risk_result && {
-    risk_items: (review.risk_result as any).risk_items ?? (review.risk_result as any).risks ?? [],
-    overall_risk: review.risk_result.overall_risk ?? "unknown",
-    ...review.risk_result,
-  };
-  const testResult = review.test_result && {
-    suggested_tests: (review.test_result as any).suggested_tests ?? (review.test_result as any).tests ?? [],
-    ...review.test_result,
-  };
+  const rawRisk = review.risk_result as Record<string, any> | null;
+  const riskItems: RiskItem[] = rawRisk?.risk_items ?? rawRisk?.risks ?? [];
+  const overallRisk: string = rawRisk?.overall_risk
+    ?? (riskItems.some((r) => r.level === "high") ? "high"
+      : riskItems.some((r) => r.level === "medium") ? "medium"
+      : riskItems.length > 0 ? "low"
+      : "unknown");
+  const riskResult = rawRisk && { ...rawRisk, risk_items: riskItems, overall_risk: overallRisk };
+
+  const rawTest = review.test_result as Record<string, any> | null;
+  const suggestedTests: TestSuggestion[] = rawTest?.suggested_tests ?? rawTest?.tests ?? [];
+  const testResult = rawTest && { ...rawTest, suggested_tests: suggestedTests };
 
   const statusStyle =
     STATUS_STYLES[review.status] ||
@@ -207,6 +233,23 @@ export default function ReviewResult({ review }: { review: ReviewDetail }) {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
           <span className="font-medium">Writeback: </span>
           {review.writeback_error}
+        </div>
+      )}
+
+      {/* Comment button */}
+      {canComment && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePostComment}
+            disabled={postingComment || commentPosted}
+            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {postingComment ? "Posting..." : commentPosted ? "Comment Posted" : "Comment on GitHub"}
+          </button>
+          {commentError && (
+            <span className="text-xs text-red-600 dark:text-red-400">{commentError}</span>
+          )}
         </div>
       )}
 
