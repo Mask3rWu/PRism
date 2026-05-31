@@ -40,6 +40,20 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN review_count INTEGER DEFAULT 0")
         conn.commit()
 
+        result = conn.exec_driver_sql("PRAGMA table_info(agent_timings)")
+        columns = {row[1] for row in result}
+        if "model" not in columns:
+            conn.exec_driver_sql("ALTER TABLE agent_timings ADD COLUMN model VARCHAR(128)")
+        if "latency_ms" not in columns:
+            conn.exec_driver_sql("ALTER TABLE agent_timings ADD COLUMN latency_ms INTEGER DEFAULT 0")
+        if "status_code" not in columns:
+            conn.exec_driver_sql("ALTER TABLE agent_timings ADD COLUMN status_code INTEGER")
+        if "retry_count" not in columns:
+            conn.exec_driver_sql("ALTER TABLE agent_timings ADD COLUMN retry_count INTEGER DEFAULT 0")
+        if "retry_errors" not in columns:
+            conn.exec_driver_sql("ALTER TABLE agent_timings ADD COLUMN retry_errors JSON")
+        conn.commit()
+
 
 def get_db():
     db = SessionLocal()

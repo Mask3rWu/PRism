@@ -44,13 +44,18 @@ async def test_suggestions_node(state: ReviewState) -> dict:
 
         pr_summary = json.dumps(summary_result, ensure_ascii=False)
         system_prompt, user_prompt = _load_prompt(project_description, pr_summary, pr_diff)
-        result = await llm_call_json(system_prompt, user_prompt)
+        result, meta = await llm_call_json(system_prompt, user_prompt)
 
         db.refresh(review)
         review.test_result = result
         review.stage = "tests_suggested"
         db.commit()
 
+        timing.model = meta["model"]
+        timing.latency_ms = meta["latency_ms"]
+        timing.status_code = meta["status_code"]
+        timing.retry_count = meta["retry_count"]
+        timing.retry_errors = meta.get("retry_errors")
         timing.end_time = datetime.now(timezone.utc)
         db.commit()
 

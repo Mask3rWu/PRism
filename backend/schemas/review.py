@@ -9,6 +9,11 @@ class AgentTimingItem(BaseModel):
     agent_name: str
     start_time: datetime
     end_time: datetime | None = None
+    model: str | None = None
+    latency_ms: int = 0
+    status_code: int | None = None
+    retry_count: int = 0
+    retry_errors: list | None = None
 
 
 class ReviewStatusResponse(BaseModel):

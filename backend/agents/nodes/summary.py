@@ -39,13 +39,18 @@ async def summary_node(state: ReviewState) -> dict:
         db.commit()
 
         system_prompt, user_prompt = _load_prompt(project_description, pr_diff)
-        result = await llm_call_json(system_prompt, user_prompt)
+        result, meta = await llm_call_json(system_prompt, user_prompt)
 
         db.refresh(review)
         review.summary_result = result
         review.stage = "summarized"
         db.commit()
 
+        timing.model = meta["model"]
+        timing.latency_ms = meta["latency_ms"]
+        timing.status_code = meta["status_code"]
+        timing.retry_count = meta["retry_count"]
+        timing.retry_errors = meta.get("retry_errors")
         timing.end_time = datetime.now(timezone.utc)
         db.commit()
 

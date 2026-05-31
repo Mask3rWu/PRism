@@ -71,6 +71,11 @@ class AgentTiming(Base):
     agent_name: Mapped[str] = mapped_column(String(64), nullable=False)
     start_time: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
     end_time: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    model: Mapped[str | None] = mapped_column(String(128), default=None)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status_code: Mapped[int | None] = mapped_column(Integer, default=None)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retry_errors: Mapped[dict | None] = mapped_column(JSON, default=None)
 
     review: Mapped["Review"] = relationship(back_populates="agent_timings")
 
