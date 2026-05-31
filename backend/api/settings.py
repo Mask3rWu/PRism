@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -40,12 +42,17 @@ def get_settings(db: Session = Depends(get_db)):
         model=s.llm_model,
         has_api_key=has_custom_llm,
     )
+    try:
+        enabled_agents_list = json.loads(s.enabled_agents or "[]")
+    except (json.JSONDecodeError, TypeError):
+        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
     return SettingsResponse(
         has_pat=bool(s.encrypted_pat),
         llm=llm,
         review_count=s.review_count,
         max_free_reviews=MAX_FREE_REVIEWS,
         agent_language=s.agent_language or "zh",
+        enabled_agents=enabled_agents_list,
     )
 
 
@@ -120,6 +127,10 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     if body.agent_language is not None:
         s.agent_language = body.agent_language
 
+    # Update enabled agents
+    if body.enabled_agents is not None:
+        s.enabled_agents = json.dumps(body.enabled_agents)
+
     db.commit()
     db.refresh(s)
 
@@ -130,12 +141,17 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
         model=s.llm_model,
         has_api_key=has_custom_llm,
     )
+    try:
+        enabled_agents_list = json.loads(s.enabled_agents or "[]")
+    except (json.JSONDecodeError, TypeError):
+        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
     return SettingsResponse(
         has_pat=bool(s.encrypted_pat),
         llm=llm,
         review_count=s.review_count,
         max_free_reviews=MAX_FREE_REVIEWS,
         agent_language=s.agent_language or "zh",
+        enabled_agents=enabled_agents_list,
     )
 
 
@@ -154,12 +170,17 @@ def clear_pat(db: Session = Depends(get_db)):
         model=s.llm_model,
         has_api_key=has_custom_llm,
     )
+    try:
+        enabled_agents_list = json.loads(s.enabled_agents or "[]")
+    except (json.JSONDecodeError, TypeError):
+        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
     return SettingsResponse(
         has_pat=False,
         llm=llm,
         review_count=s.review_count,
         max_free_reviews=MAX_FREE_REVIEWS,
         agent_language=s.agent_language or "zh",
+        enabled_agents=enabled_agents_list,
     )
 
 
@@ -180,12 +201,17 @@ def clear_llm(db: Session = Depends(get_db)):
         model=s.llm_model,
         has_api_key=False,
     )
+    try:
+        enabled_agents_list = json.loads(s.enabled_agents or "[]")
+    except (json.JSONDecodeError, TypeError):
+        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
     return SettingsResponse(
         has_pat=bool(s.encrypted_pat),
         llm=llm,
         review_count=s.review_count,
         max_free_reviews=MAX_FREE_REVIEWS,
         agent_language=s.agent_language or "zh",
+        enabled_agents=enabled_agents_list,
     )
 
 

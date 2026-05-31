@@ -23,6 +23,8 @@ Compose a Markdown comment for the GitHub PR with the following sections:
 4. **## Test Suggestions** — List each suggested test case with target, scenario, and priority.
 5. **## Review Platform** — Add a placeholder: "> Powered by [PRism](https://github.com) — AI Code Review Assistant"
 
+All comment content must be written in Chinese (简体中文).
+
 Guidelines:
 - Use proper Markdown formatting (headers, lists, code blocks, bold, italic)
 - Use GitHub-flavored Markdown where appropriate

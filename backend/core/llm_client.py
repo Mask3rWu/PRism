@@ -24,7 +24,15 @@ async def llm_call(system_prompt: str, user_prompt: str) -> tuple[str, dict]:
     language = config.get("language", "zh")
     retry_errors: list[dict] = []
 
-    lang_instruction = "Reply in Chinese." if language == "zh" else "Reply in English."
+    if language == "zh":
+        lang_instruction = (
+            "Language: You MUST write all text content in Chinese (简体中文). "
+            "All descriptions, summaries, scenarios, reasons, suggestions, overviews, "
+            "and explanations must be in Chinese. Only JSON keys, code identifiers, "
+            "and technical terms should remain in English."
+        )
+    else:
+        lang_instruction = "Reply in English."
     if lang_instruction not in system_prompt:
         system_prompt = f"{system_prompt}\n{lang_instruction}"
 

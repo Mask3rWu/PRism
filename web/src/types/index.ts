@@ -47,6 +47,7 @@ export interface Settings {
   review_count: number;
   max_free_reviews: number;
   agent_language: "zh" | "en";
+  enabled_agents: string[];
 }
 
 export interface LLMSettingsUpdatePayload {
@@ -60,6 +61,7 @@ export interface SettingsUpdatePayload {
   pat?: string;
   llm?: LLMSettingsUpdatePayload;
   agent_language?: "zh" | "en";
+  enabled_agents?: string[];
 }
 
 export interface CallLogItem {
@@ -107,6 +109,7 @@ export interface PullRequestItem {
   base_branch: string;
   review_status: "none" | "queued" | "running" | "succeeded" | "failed";
   review_id: number | null;
+  comment_posted: boolean;
   state: "open" | "closed";
   labels: LabelItem[];
   is_draft: boolean;
@@ -139,6 +142,8 @@ export interface ReviewStatusResponse {
   status: string;
   stage: string | null;
   error_message: string | null;
+  write_comment: boolean;
+  writeback_error: string | null;
   started_at: string | null;
   completed_at: string | null;
   agent_timings: AgentTimingItem[];
@@ -200,6 +205,7 @@ export interface ReviewDetail {
   test_result: TestResult | null;
   comment_content: string | null;
   writeback_error: string | null;
+  write_comment: boolean;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;

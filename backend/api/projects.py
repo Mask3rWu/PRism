@@ -10,7 +10,7 @@ from backend.core.llm_config import MAX_FREE_REVIEWS
 from backend.models import AppSettings, Project, Review, ReviewStatus
 from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem, ReviewStats
-from backend.schemas.review import ReviewResponse
+from backend.schemas.review import ReviewResponse, ReviewTriggerRequest
 from backend.seed import SEED_PR_LISTS
 from backend.services.github.client import fetch_pr_detail, fetch_pulls, search_pulls
 from backend.services.review.service import _run_review_background
@@ -132,7 +132,7 @@ def batch_delete_projects(body: BatchDeleteRequest, db: Session = Depends(get_db
     return None
 
 
-def _pr_to_item(pr: dict, review_status_map: dict[int, str], review_id_map: dict[int, int] | None = None) -> PullRequestItem:
+def _pr_to_item(pr: dict, review_status_map: dict[int, str], review_id_map: dict[int, int] | None = None, comment_posted_map: dict[int, bool] | None = None) -> PullRequestItem:
     labels_raw = pr.get("labels") or []
     pr_number = pr["number"]
     return PullRequestItem(
@@ -145,6 +145,7 @@ def _pr_to_item(pr: dict, review_status_map: dict[int, str], review_id_map: dict
         base_branch=pr["base"]["ref"],
         review_status=review_status_map.get(pr_number, "none"),
         review_id=review_id_map.get(pr_number) if review_id_map else None,
+        comment_posted=comment_posted_map.get(pr_number, False) if comment_posted_map else False,
         state=pr.get("state", "open"),
         labels=[{"name": lb["name"], "color": lb["color"]} for lb in labels_raw if lb.get("name")],
         is_draft=pr.get("draft", False),
@@ -263,8 +264,12 @@ async def list_pull_requests(
     ).all()
     review_status_map: dict[int, str] = {r.pr_number: r.status.value for r in reviews}
     review_id_map: dict[int, int] = {r.pr_number: r.id for r in reviews}
+    comment_posted_map: dict[int, bool] = {
+        r.pr_number: bool(r.write_comment and not r.writeback_error)
+        for r in reviews
+    }
 
-    items = [_pr_to_item(pr, review_status_map, review_id_map) for pr in prs]
+    items = [_pr_to_item(pr, review_status_map, review_id_map, comment_posted_map) for pr in prs]
     items = _filter_by_pr_status(items, pr_status)
 
     # Compute review stats (total across all PRs, not just current page/filter)
@@ -295,6 +300,7 @@ async def trigger_review(
     project_id: int,
     pr_number: int,
     background_tasks: BackgroundTasks,
+    body: ReviewTriggerRequest = ReviewTriggerRequest(),
     db: Session = Depends(get_db),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -337,6 +343,21 @@ async def trigger_review(
     db.commit()
     db.refresh(review)
 
-    background_tasks.add_task(_run_review_background, review.id)
+    # Resolve enabled_agents from body or AppSettings default
+    if body.enabled_agents is None:
+        try:
+            settings_agents = json.loads(app_settings.enabled_agents or "[]")
+        except (json.JSONDecodeError, TypeError):
+            settings_agents = []
+        effective_agents = settings_agents if settings_agents else ["risk_analysis", "issue_detection", "test_suggestions"]
+    else:
+        effective_agents = body.enabled_agents
+
+    background_tasks.add_task(
+        _run_review_background,
+        review.id,
+        enabled_agents=effective_agents,
+        write_comment=body.write_comment,
+    )
 
     return review

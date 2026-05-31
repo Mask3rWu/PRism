@@ -11,7 +11,11 @@ from backend.services.github.client import fetch_pr_diff, writeback_comment
 _review_semaphore = asyncio.Semaphore(3)
 
 
-async def _run_review_background(review_id: int) -> None:
+async def _run_review_background(
+    review_id: int,
+    enabled_agents: list[str] | None = None,
+    write_comment: bool = True,
+) -> None:
     """Background task: wait for concurrency slot, fetch PR diff, run review graph."""
     db = SessionLocal()
     try:
@@ -42,12 +46,15 @@ async def _run_review_background(review_id: int) -> None:
 
             review.diff_content = diff
             review.stage = "diff_fetched"
+            review.write_comment = write_comment
             db.commit()
 
             state: ReviewState = {
                 "project_description": project.description or "",
                 "pr_diff": diff,
                 "review_id": review_id,
+                "enabled_agents": enabled_agents or ["risk_analysis", "issue_detection", "test_suggestions"],
+                "write_comment": write_comment,
             }
             try:
                 await review_graph.ainvoke(state)
@@ -71,7 +78,7 @@ async def _run_review_background(review_id: int) -> None:
                 app_settings.review_count += 1
                 db.commit()
 
-            if review.comment_content:
+            if write_comment and review.comment_content:
                 review_link = f"{settings.FRONTEND_URL}/reviews/{review_id}"
                 full_comment = review.comment_content.replace(
                     "https://github.com", review_link

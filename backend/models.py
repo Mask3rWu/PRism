@@ -55,6 +55,7 @@ class Review(Base):
     diff_content: Mapped[str | None] = mapped_column(Text, default=None)
     comment_content: Mapped[str | None] = mapped_column(Text, default=None)
     writeback_error: Mapped[str | None] = mapped_column(Text, default=None)
+    write_comment: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
@@ -91,6 +92,7 @@ class AppSettings(Base):
     llm_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     agent_language: Mapped[str] = mapped_column(String(8), nullable=False, default="zh")
+    enabled_agents: Mapped[str] = mapped_column(Text, default='["risk_analysis", "issue_detection", "test_suggestions"]', nullable=False)
 
 
 class ApiCallLog(Base):

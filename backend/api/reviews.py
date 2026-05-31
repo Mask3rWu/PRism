@@ -62,6 +62,7 @@ async def retry_writeback(review_id: int):
             full_comment,
         )
         if ok:
+            review.write_comment = True
             review.writeback_error = None
             db.commit()
             return {"status": "ok", "message": "Comment posted successfully"}

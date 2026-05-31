@@ -40,6 +40,19 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN review_count INTEGER DEFAULT 0")
         if "agent_language" not in columns:
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN agent_language TEXT DEFAULT 'zh'")
+        if "enabled_agents" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN enabled_agents TEXT DEFAULT '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]'")
+        # Fix existing rows that have the old empty default
+        conn.exec_driver_sql(
+            "UPDATE app_settings SET enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]' "
+            "WHERE enabled_agents = '[]' OR enabled_agents IS NULL OR enabled_agents = ''"
+        )
+        conn.commit()
+
+        result = conn.exec_driver_sql("PRAGMA table_info(reviews)")
+        columns = {row[1] for row in result}
+        if "write_comment" not in columns:
+            conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN write_comment BOOLEAN DEFAULT 1")
         conn.commit()
 
         result = conn.exec_driver_sql("PRAGMA table_info(agent_timings)")
