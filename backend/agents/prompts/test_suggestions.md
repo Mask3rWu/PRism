@@ -20,6 +20,8 @@ Generate concrete test suggestions based on the code changes. Focus on:
 
 For each suggested test, be specific about what to test and why.
 
+All scenario descriptions and test explanations must be written in Chinese (简体中文).
+
 Return your analysis as a JSON object with:
 - "tests": A list of test items, each with:
   - "target": The function, endpoint, or module to test (string)
