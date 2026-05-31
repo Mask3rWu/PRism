@@ -24,6 +24,8 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN permission TEXT DEFAULT 'Viewer'")
         if "last_synced_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN last_synced_at TIMESTAMP")
+        if "repo_url" not in columns:
+            conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN repo_url VARCHAR(512) DEFAULT ''")
         conn.commit()
 
         result = conn.exec_driver_sql("PRAGMA table_info(app_settings)")

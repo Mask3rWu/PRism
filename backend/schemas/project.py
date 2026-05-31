@@ -18,6 +18,7 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     tags: list[str] | None = None
     is_favorite: bool | None = None
+    repo_url: str | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -27,6 +28,7 @@ class ProjectResponse(BaseModel):
     name: str
     repo_owner: str
     repo_name: str
+    repo_url: str
     description: str
     tags: list[str]
     is_favorite: bool

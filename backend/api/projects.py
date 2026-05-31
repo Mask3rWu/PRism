@@ -34,6 +34,7 @@ async def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
         name=body.name,
         repo_owner=body.repo_owner,
         repo_name=body.repo_name,
+        repo_url=f"https://github.com/{body.repo_owner}/{body.repo_name}",
         description=body.description,
         permission=body.permission,
         tags=json.dumps(body.tags),
@@ -80,6 +81,50 @@ def list_projects(
     )
 
 
+@router.get("/lookup")
+def lookup_project(url: str = Query(..., description="Git remote URL or GitHub HTTPS URL"), db: Session = Depends(get_db)):
+    """通过 git remote URL 查找匹配的项目。
+
+    支持格式：git@github.com:owner/repo.git / https://github.com/owner/repo / owner/repo
+    """
+    import re
+
+    # Normalize: extract owner/repo from various URL formats
+    patterns = [
+        r"(?:https?://)?github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$",  # HTTPS or git@github.com:
+        r"^(?:https?://)?github\.com/([^/]+)/([^/]+?)(?:\.git)?$",    # full HTTPS URL
+    ]
+
+    owner, repo = None, None
+    for pattern in patterns:
+        m = re.search(pattern, url.strip())
+        if m:
+            owner, repo = m.group(1), m.group(2)
+            break
+
+    # Also handle bare "owner/repo"
+    if not owner and "/" in url and "://" not in url and "@" not in url:
+        parts = url.strip().rstrip(".git").split("/")
+        if len(parts) == 2:
+            owner, repo = parts[0], parts[1]
+
+    if not owner or not repo:
+        raise HTTPException(status_code=400, detail=f"无法从 URL 解析 owner/repo: {url}")
+
+    expected_url = f"https://github.com/{owner}/{repo}"
+    project = db.query(Project).filter(Project.repo_url == expected_url).first()
+    if project is None:
+        # Fallback: match by owner + repo_name for projects without repo_url set
+        project = db.query(Project).filter(
+            Project.repo_owner == owner,
+            Project.repo_name == repo,
+        ).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"未找到匹配项目: {expected_url}")
+
+    return project
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -105,6 +150,8 @@ def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(g
         project.tags = json.dumps(body.tags)
     if body.is_favorite is not None:
         project.is_favorite = body.is_favorite
+    if body.repo_url is not None:
+        project.repo_url = body.repo_url
 
     db.commit()
     db.refresh(project)
