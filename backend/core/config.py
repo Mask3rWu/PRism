@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     LLM_ENDPOINT: str = Field(default="", alias="DEFAULT_LLM_BASE_URL")
     FERNET_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
+    ENABLE_SEED: bool = False
 
 
 settings = Settings()

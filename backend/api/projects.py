@@ -237,7 +237,10 @@ async def list_pull_requests(
                 sort=sort, direction=direction,
             )
             if result is None:
-                raise HTTPException(status_code=502, detail="Failed to search pull requests from GitHub")
+                raise HTTPException(
+                    status_code=502,
+                    detail="Search requires a GitHub PAT. Configure one in Settings, or browse without filters.",
+                )
             total = result["total_count"]
             prs = result["items"]
         else:
@@ -247,7 +250,7 @@ async def list_pull_requests(
                 state=state, sort=sort, direction=direction,
             )
             if github_prs is None:
-                raise HTTPException(status_code=502, detail="Failed to fetch pull requests from GitHub")
+                raise HTTPException(status_code=502, detail="Failed to fetch pull requests from GitHub. If this is a private repo, configure a PAT in Settings.")
             total = (page - 1) * per_page + len(github_prs)
             if len(github_prs) >= per_page:
                 total = page * per_page + 1  # indicate more pages exist
@@ -322,7 +325,7 @@ async def trigger_review(
         pr_number,
     )
     if pr_detail is None:
-        raise HTTPException(status_code=502, detail="Failed to fetch PR details from GitHub")
+        raise HTTPException(status_code=502, detail="Failed to fetch PR details from GitHub. If this is a private repo, configure a PAT in Settings.")
 
     review = Review(
         project_id=project_id,

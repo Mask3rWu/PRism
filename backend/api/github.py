@@ -50,7 +50,6 @@ async def get_user_repos(db: Session = Depends(get_db)):
 
 @router.post("/validate-repo")
 async def validate_repo(body: dict, db: Session = Depends(get_db)):
-    _check_pat(db)
     url = body.get("url", "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")

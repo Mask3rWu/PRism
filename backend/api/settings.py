@@ -139,6 +139,30 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/clear-pat", response_model=SettingsResponse)
+def clear_pat(db: Session = Depends(get_db)):
+    """Remove the configured GitHub PAT."""
+    s = _get_or_create_settings(db)
+    s.encrypted_pat = ""
+    db.commit()
+    db.refresh(s)
+
+    has_custom_llm = bool(s.encrypted_llm_api_key)
+    llm = LLMSettingsResponse(
+        provider=s.llm_provider or "pat",
+        endpoint=s.llm_endpoint,
+        model=s.llm_model,
+        has_api_key=has_custom_llm,
+    )
+    return SettingsResponse(
+        has_pat=False,
+        llm=llm,
+        review_count=s.review_count,
+        max_free_reviews=MAX_FREE_REVIEWS,
+        agent_language=s.agent_language or "zh",
+    )
+
+
 @router.post("/clear-llm", response_model=SettingsResponse)
 def clear_llm(db: Session = Depends(get_db)):
     """Remove the custom LLM configuration, reverting to free LLM."""
