@@ -5,7 +5,7 @@ from backend.agents.review_graph import review_graph
 from backend.agents.states import ReviewState
 from backend.core.config import settings
 from backend.core.database import SessionLocal
-from backend.models import Review, ReviewStatus
+from backend.models import AppSettings, Review, ReviewStatus
 from backend.services.github.client import fetch_pr_diff, writeback_comment
 
 _review_semaphore = asyncio.Semaphore(3)
@@ -64,6 +64,12 @@ async def _run_review_background(review_id: int) -> None:
             review.status = ReviewStatus.succeeded
             review.completed_at = datetime.now(timezone.utc)
             db.commit()
+
+            # Increment free review count if using default LLM
+            app_settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
+            if app_settings and not app_settings.encrypted_llm_api_key:
+                app_settings.review_count += 1
+                db.commit()
 
             if review.comment_content:
                 review_link = f"{settings.FRONTEND_URL}/reviews/{review_id}"

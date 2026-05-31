@@ -65,7 +65,7 @@ async def comment_compose_node(state: ReviewState) -> dict:
         system_prompt, user_prompt = _load_prompt(
             project_description, pr_summary, risk_analysis, issue_detection, test_suggestions
         )
-        result = await llm_call_json(system_prompt, user_prompt)
+        result, meta = await llm_call_json(system_prompt, user_prompt)
 
         comment_content = result.get("comment", "") if isinstance(result, dict) else ""
 
@@ -74,6 +74,11 @@ async def comment_compose_node(state: ReviewState) -> dict:
         review.stage = "comment_composed"
         db.commit()
 
+        timing.model = meta["model"]
+        timing.latency_ms = meta["latency_ms"]
+        timing.status_code = meta["status_code"]
+        timing.retry_count = meta["retry_count"]
+        timing.retry_errors = meta.get("retry_errors")
         timing.end_time = datetime.now(timezone.utc)
         db.commit()
 
