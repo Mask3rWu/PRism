@@ -20,11 +20,21 @@ async function getProject(id: string): Promise<Project | null> {
 async function getPRs(
   id: string,
   page: number,
-  perPage: number
+  perPage: number,
+  state: string,
+  sort: string,
+  direction: string,
 ): Promise<PaginatedPRs> {
   try {
+    const params = new URLSearchParams({
+      page: String(page),
+      per_page: String(perPage),
+      state,
+      sort,
+      direction,
+    });
     const res = await fetch(
-      `${BACKEND}/api/projects/${id}/pulls?page=${page}&per_page=${perPage}&state=open`,
+      `${BACKEND}/api/projects/${id}/pulls?${params}`,
       { cache: "no-store" }
     );
     if (!res.ok) return { items: [], total: 0, page, per_page: perPage, review_stats: null };
@@ -34,18 +44,24 @@ async function getPRs(
   }
 }
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ state?: string; sort?: string; search?: string; author?: string }>;
 }
 
-export default async function ProjectDetailPage({ params }: Props) {
+export default async function ProjectDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;
   const page = 1;
   const perPage = 30;
+  const state = sp.state || "open";
+  const [sortField, direction] = (sp.sort || "created-desc").split("-");
 
   const [project, prData] = await Promise.all([
     getProject(id),
-    getPRs(id, page, perPage),
+    getPRs(id, page, perPage, state, sortField, direction || "desc"),
   ]);
 
   if (!project) {
@@ -61,7 +77,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           href="/"
           className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
         >
-          ← Back to Projects
+          Back to Projects
         </Link>
       </div>
     );

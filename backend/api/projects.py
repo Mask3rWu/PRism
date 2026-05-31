@@ -131,17 +131,19 @@ def batch_delete_projects(body: BatchDeleteRequest, db: Session = Depends(get_db
     return None
 
 
-def _pr_to_item(pr: dict, review_status_map: dict[int, str]) -> PullRequestItem:
+def _pr_to_item(pr: dict, review_status_map: dict[int, str], review_id_map: dict[int, int] | None = None) -> PullRequestItem:
     labels_raw = pr.get("labels") or []
+    pr_number = pr["number"]
     return PullRequestItem(
-        pr_number=pr["number"],
+        pr_number=pr_number,
         title=pr["title"],
         author=pr["user"]["login"] if pr.get("user") else "unknown",
         created_at=pr["created_at"],
         updated_at=pr.get("updated_at"),
         head_branch=pr["head"]["ref"],
         base_branch=pr["base"]["ref"],
-        review_status=review_status_map.get(pr["number"], "none"),
+        review_status=review_status_map.get(pr_number, "none"),
+        review_id=review_id_map.get(pr_number) if review_id_map else None,
         state=pr.get("state", "open"),
         labels=[{"name": lb["name"], "color": lb["color"]} for lb in labels_raw if lb.get("name")],
         is_draft=pr.get("draft", False),
@@ -256,8 +258,9 @@ async def list_pull_requests(
         Review.pr_number.in_(pr_numbers),
     ).all()
     review_status_map: dict[int, str] = {r.pr_number: r.status.value for r in reviews}
+    review_id_map: dict[int, int] = {r.pr_number: r.id for r in reviews}
 
-    items = [_pr_to_item(pr, review_status_map) for pr in prs]
+    items = [_pr_to_item(pr, review_status_map, review_id_map) for pr in prs]
     items = _filter_by_pr_status(items, pr_status)
 
     # Compute review stats (total across all PRs, not just current page/filter)

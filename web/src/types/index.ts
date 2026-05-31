@@ -62,6 +62,7 @@ export interface PullRequestItem {
   head_branch: string;
   base_branch: string;
   review_status: "none" | "queued" | "running" | "succeeded" | "failed";
+  review_id: number | null;
   state: "open" | "closed";
   labels: LabelItem[];
   is_draft: boolean;

@@ -133,6 +133,21 @@ function CollapsibleSection({
 export default function ReviewResult({ review }: { review: ReviewDetail }) {
   const [issueSortAsc, setIssueSortAsc] = useState(false);
 
+  // Normalize LLM field name variations
+  const summaryResult = review.summary_result && {
+    ...review.summary_result,
+    files_changed: review.summary_result.files_changed ?? [],
+  };
+  const riskResult = review.risk_result && {
+    risk_items: (review.risk_result as any).risk_items ?? (review.risk_result as any).risks ?? [],
+    overall_risk: review.risk_result.overall_risk ?? "unknown",
+    ...review.risk_result,
+  };
+  const testResult = review.test_result && {
+    suggested_tests: (review.test_result as any).suggested_tests ?? (review.test_result as any).tests ?? [],
+    ...review.test_result,
+  };
+
   const statusStyle =
     STATUS_STYLES[review.status] ||
     "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400";
@@ -205,7 +220,7 @@ export default function ReviewResult({ review }: { review: ReviewDetail }) {
       )}
 
       {/* PR Summary */}
-      {review.summary_result && (
+      {summaryResult && (
         <CollapsibleSection title="PR Summary" icon="📋">
           <div className="space-y-4">
             <div>
@@ -213,16 +228,16 @@ export default function ReviewResult({ review }: { review: ReviewDetail }) {
                 Overview
               </h3>
               <p className="mt-1 text-sm text-zinc-900 dark:text-zinc-100">
-                {review.summary_result.overview}
+                {summaryResult.overview}
               </p>
             </div>
-            {review.summary_result.scope.length > 0 && (
+            {summaryResult.scope.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                   Scope
                 </h3>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {review.summary_result.scope.map((s) => (
+                  {summaryResult.scope.map((s) => (
                     <span
                       key={s}
                       className="inline-flex rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
@@ -233,25 +248,25 @@ export default function ReviewResult({ review }: { review: ReviewDetail }) {
                 </div>
               </div>
             )}
-            {review.summary_result.key_changes.length > 0 && (
+            {summaryResult.key_changes.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                   Key Changes
                 </h3>
                 <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm text-zinc-700 dark:text-zinc-300">
-                  {review.summary_result.key_changes.map((c, i) => (
+                  {summaryResult.key_changes.map((c, i) => (
                     <li key={i}>{c}</li>
                   ))}
                 </ul>
               </div>
             )}
-            {review.summary_result.files_changed.length > 0 && (
+            {summaryResult.files_changed?.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                   Files Changed
                 </h3>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {review.summary_result.files_changed.map((f) => (
+                  {summaryResult.files_changed.map((f) => (
                     <code
                       key={f}
                       className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-mono text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
@@ -267,29 +282,29 @@ export default function ReviewResult({ review }: { review: ReviewDetail }) {
       )}
 
       {/* Risk Analysis */}
-      {review.risk_result && (
+      {riskResult && (
         <CollapsibleSection
           title="Risk Analysis"
           icon="⚠️"
           badge={
-            review.risk_result.overall_risk && (
+            riskResult.overall_risk && (
               <span
-                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${RISK_STYLES[review.risk_result.overall_risk] || "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}
+                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${RISK_STYLES[riskResult.overall_risk] || "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}
               >
-                {review.risk_result.overall_risk.toUpperCase()}
+                {riskResult.overall_risk.toUpperCase()}
               </span>
             )
           }
           defaultOpen={
-            review.risk_result.overall_risk === "high" ||
-            review.risk_result.overall_risk === "medium"
+            riskResult.overall_risk === "high" ||
+            riskResult.overall_risk === "medium"
           }
         >
-          {review.risk_result.risk_items.length === 0 ? (
+          {riskResult.risk_items.length === 0 ? (
             <p className="text-sm text-zinc-500">No risks identified.</p>
           ) : (
             <div className="space-y-3">
-              {review.risk_result.risk_items.map((item, i) => (
+              {riskResult.risk_items.map((item, i) => (
                 <div
                   key={i}
                   className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3"
@@ -391,21 +406,21 @@ export default function ReviewResult({ review }: { review: ReviewDetail }) {
       )}
 
       {/* Test Suggestions */}
-      {review.test_result && (
+      {testResult && (
         <CollapsibleSection
           title="Test Suggestions"
           icon="🧪"
           badge={
             <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              {review.test_result.suggested_tests.length}
+              {testResult.suggested_tests.length}
             </span>
           }
         >
-          {review.test_result.suggested_tests.length === 0 ? (
+          {testResult.suggested_tests.length === 0 ? (
             <p className="text-sm text-zinc-500">No test suggestions.</p>
           ) : (
             <div className="space-y-2">
-              {review.test_result.suggested_tests.map((test, i) => (
+              {testResult.suggested_tests.map((test, i) => (
                 <div
                   key={i}
                   className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3 flex items-start justify-between gap-3"
