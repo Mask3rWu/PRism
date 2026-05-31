@@ -4,7 +4,8 @@ scripts/
 /tasks/
 
 
-backend/.env
+backend/.env*
 __pycache__/
 *.db
 plan.md
+.next/

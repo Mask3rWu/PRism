@@ -55,13 +55,13 @@ async def risk_analysis_node(state: ReviewState) -> dict:
         db.commit()
 
         return {"risk_result": result}
-    except Exception:
+    except Exception as e:
         db.rollback()
         review = db.query(Review).filter(Review.id == review_id).first()
         if review:
             review.status = ReviewStatus.failed
             review.stage = "analyzing_risks"
-            review.error_message = "Risk analysis agent failed"
+            review.error_message = f"Risk analysis agent failed: {e}"
             review.completed_at = datetime.now(timezone.utc)
             db.commit()
         raise

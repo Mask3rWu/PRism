@@ -55,13 +55,13 @@ async def test_suggestions_node(state: ReviewState) -> dict:
         db.commit()
 
         return {"test_result": result}
-    except Exception:
+    except Exception as e:
         db.rollback()
         review = db.query(Review).filter(Review.id == review_id).first()
         if review:
             review.status = ReviewStatus.failed
             review.stage = "suggesting_tests"
-            review.error_message = "Test suggestions agent failed"
+            review.error_message = f"Test suggestions agent failed: {e}"
             review.completed_at = datetime.now(timezone.utc)
             db.commit()
         raise

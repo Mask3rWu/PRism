@@ -31,8 +31,15 @@ async def llm_call(system_prompt: str, user_prompt: str) -> str:
 async def llm_call_json(system_prompt: str, user_prompt: str) -> dict:
     """Call the LLM and parse the response as JSON."""
     text = await llm_call(system_prompt, user_prompt)
-    # Strip markdown code fences if present
     text = text.strip()
+
+    # Strip <think>...</think> tags (reasoning tokens from MiniMax / DeepSeek models)
+    if text.startswith("<think>"):
+        end_idx = text.find("</think>")
+        if end_idx != -1:
+            text = text[end_idx + len("</think>"):].strip()
+
+    # Strip markdown code fences if present
     if text.startswith("```"):
         lines = text.split("\n")
         # Remove opening fence (```json or ```) and closing ```
@@ -41,4 +48,5 @@ async def llm_call_json(system_prompt: str, user_prompt: str) -> dict:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines)
+
     return json.loads(text)
