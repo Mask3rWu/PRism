@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import type { ReviewDetail, IssueItem, RiskItem, TestSuggestion } from "@/types";
 
 const SEVERITY_ORDER: Record<string, number> = {
@@ -137,14 +138,16 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
   const [commentError, setCommentError] = useState<string | null>(null);
 
   async function handlePostComment() {
-    setPostingComment(true);
-    setCommentError(null);
+    flushSync(() => {
+      setPostingComment(true);
+      setCommentError(null);
+    });
     try {
       const res = await fetch(`/api/reviews/${review.id}/retry-writeback`, { method: "POST" });
       if (res.ok) {
         setCommentPosted(true);
       } else {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ detail: "Failed to post comment" }));
         setCommentError(data.detail || "Failed to post comment");
       }
     } catch {
@@ -154,7 +157,7 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
     }
   }
 
-  const canComment = projectPermission && projectPermission !== "Viewer" && review.status === "succeeded" && review.comment_content && !(review.write_comment && !review.writeback_error);
+  const canComment = !commentPosted && projectPermission && projectPermission !== "Viewer" && review.status === "succeeded" && review.comment_content && !(review.write_comment && !review.writeback_error);
 
   // Normalize LLM field name variations
   const summaryResult = review.summary_result && {
@@ -245,7 +248,7 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
             disabled={postingComment || commentPosted}
             className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {postingComment ? "Posting..." : commentPosted ? "Comment Posted" : "Comment on GitHub"}
+            {postingComment ? "Commenting..." : "Comment on GitHub"}
           </button>
           {commentError && (
             <span className="text-xs text-red-600 dark:text-red-400">{commentError}</span>

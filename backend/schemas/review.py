@@ -23,6 +23,8 @@ class ReviewStatusResponse(BaseModel):
     status: str
     stage: str | None = None
     error_message: str | None = None
+    write_comment: bool = True
+    writeback_error: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     agent_timings: list[AgentTimingItem] = []

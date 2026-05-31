@@ -217,10 +217,11 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
             pollingRef.current = next;
 
             const newStatus = data.status as PullRequestItem["review_status"];
+            const commentPosted = !!(data.write_comment && !data.writeback_error);
             setPRs((prev) =>
               prev.map((pr) =>
                 pr.pr_number === prNumber
-                  ? { ...pr, review_status: newStatus }
+                  ? { ...pr, review_status: newStatus, comment_posted: commentPosted }
                   : pr
               )
             );

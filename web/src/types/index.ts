@@ -142,6 +142,8 @@ export interface ReviewStatusResponse {
   status: string;
   stage: string | null;
   error_message: string | null;
+  write_comment: boolean;
+  writeback_error: string | null;
   started_at: string | null;
   completed_at: string | null;
   agent_timings: AgentTimingItem[];
