@@ -42,6 +42,20 @@ def get_llm_config() -> dict:
     finally:
         db.close()
 
+    # Tier 2: Free LLM from encrypted config (bundled with repo)
+    from backend.core.free_llm import get_free_llm_config
+
+    free = get_free_llm_config()
+    if free:
+        _cache = {
+            "endpoint": free["endpoint"],
+            "api_key": free["api_key"],
+            "model": free["model"],
+            "using_default": True,
+        }
+        _cache_time = now
+        return _cache
+
     if settings.LLM_ENDPOINT and settings.LLM_API_KEY:
         _cache = {
             "endpoint": settings.LLM_ENDPOINT,
