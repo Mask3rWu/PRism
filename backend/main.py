@@ -19,7 +19,8 @@ async def lifespan(app: FastAPI):
     _migrate_db()
     Base.metadata.create_all(bind=engine)
     ensure_fernet_key()
-    seed_database()
+    if settings.ENABLE_SEED:
+        seed_database()
     yield
 
 

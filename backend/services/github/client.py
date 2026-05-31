@@ -25,6 +25,15 @@ def _get_decrypted_pat() -> str:
         db.close()
 
 
+def _gh_headers(accept: str = "application/vnd.github.v3+json") -> dict:
+    """Build headers for a GitHub API request. Includes Authorization only if a PAT is configured."""
+    headers = {"Accept": accept}
+    pat = _get_decrypted_pat()
+    if pat:
+        headers["Authorization"] = f"Bearer {pat}"
+    return headers
+
+
 async def validate_pat_global(pat: str) -> tuple[bool, str | None]:
     """Validate a GitHub PAT by calling the /user endpoint and checking scopes."""
     url = "https://api.github.com/user"
@@ -88,16 +97,13 @@ async def fetch_pulls(
     sort: str = "created",
     direction: str = "desc",
 ) -> list[dict] | None:
-    """Fetch pull requests from a GitHub repository using the global PAT."""
-    pat = _get_decrypted_pat()
-    if not pat:
-        return None
+    """Fetch pull requests from a GitHub repository. Works without PAT for public repos."""
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
     params: dict[str, str | int] = {
         "state": state, "page": page, "per_page": per_page,
         "sort": sort, "direction": direction,
     }
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     for attempt in range(GH_RETRIES + 1):
         t0 = time.time()
@@ -136,7 +142,7 @@ async def search_pulls(
     sort: str = "created",
     direction: str = "desc",
 ) -> dict | None:
-    """Search pull requests using the GitHub Search API. Returns {total_count, items} or None."""
+    """Search pull requests using the GitHub Search API. Requires PAT (Search API auth mandatory)."""
     pat = _get_decrypted_pat()
     if not pat:
         return None
@@ -160,7 +166,7 @@ async def search_pulls(
         "q": q, "sort": search_sort, "order": direction,
         "page": page, "per_page": per_page,
     }
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     for attempt in range(GH_RETRIES + 1):
         t0 = time.time()
@@ -229,12 +235,9 @@ async def search_pulls(
 
 
 async def fetch_pr_detail(owner: str, repo: str, pr_number: int) -> dict | None:
-    """Fetch a single PR's details (JSON) from GitHub using the global PAT."""
-    pat = _get_decrypted_pat()
-    if not pat:
-        return None
+    """Fetch a single PR's details (JSON) from GitHub. Works without PAT for public repos."""
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     t0 = time.time()
     async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
@@ -254,12 +257,9 @@ async def fetch_pr_detail(owner: str, repo: str, pr_number: int) -> dict | None:
 
 
 async def fetch_pr_diff(owner: str, repo: str, pr_number: int) -> str | None:
-    """Fetch a single PR's raw diff from GitHub using the global PAT."""
-    pat = _get_decrypted_pat()
-    if not pat:
-        return None
+    """Fetch a single PR's raw diff from GitHub. Works without PAT for public repos."""
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3.diff"}
+    headers = _gh_headers("application/vnd.github.v3.diff")
 
     for attempt in range(GH_RETRIES + 1):
         t0 = time.time()
@@ -289,12 +289,12 @@ async def fetch_pr_diff(owner: str, repo: str, pr_number: int) -> str | None:
 
 
 async def writeback_comment(owner: str, repo: str, pr_number: int, body: str) -> bool:
-    """Post a review comment to a GitHub PR issue using the global PAT. Returns True on success."""
+    """Post a review comment to a GitHub PR. Requires PAT (write operation)."""
     pat = _get_decrypted_pat()
     if not pat:
         return False
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     for attempt in range(GH_RETRIES + 1):
         t0 = time.time()
@@ -325,12 +325,9 @@ async def writeback_comment(owner: str, repo: str, pr_number: int, body: str) ->
 
 
 async def get_repo(owner: str, repo: str) -> dict | None:
-    """Fetch repository info from GitHub using the global PAT."""
-    pat = _get_decrypted_pat()
-    if not pat:
-        return None
+    """Fetch repository info from GitHub. Works without PAT for public repos."""
     url = f"https://api.github.com/repos/{owner}/{repo}"
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     t0 = time.time()
     async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
@@ -350,13 +347,13 @@ async def get_repo(owner: str, repo: str) -> dict | None:
 
 
 async def list_user_repos(per_page: int = 100) -> list[dict] | None:
-    """Fetch the authenticated user's repositories from GitHub."""
+    """Fetch the authenticated user's repositories. Requires PAT (user identity)."""
     pat = _get_decrypted_pat()
     if not pat:
         return None
     url = "https://api.github.com/user/repos"
     params = {"type": "owner", "sort": "updated", "per_page": per_page}
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     t0 = time.time()
     async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
@@ -376,13 +373,12 @@ async def list_user_repos(per_page: int = 100) -> list[dict] | None:
 
 
 async def validate_public_repo(owner: str, repo: str) -> tuple[bool, str | None]:
-    """Check that a repository exists and is public. Returns (is_valid, error_message)."""
-    pat = _get_decrypted_pat()
-    if not pat:
-        return False, "No PAT configured. Please set a PAT in Settings first."
+    """Check that a repository exists and is public. Works without PAT for public repos.
 
+    Note: without PAT, private repos return 404 (indistinguishable from nonexistent repos).
+    """
     url = f"https://api.github.com/repos/{owner}/{repo}"
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = _gh_headers()
 
     async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:

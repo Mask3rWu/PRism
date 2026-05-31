@@ -116,6 +116,28 @@ export default function SettingsModal({ open, onClose }: Props) {
     [onClose, verifiedPat],
   );
 
+  const handleClearPat = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/settings/clear-pat", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.detail || "Failed to clear PAT");
+      } else {
+        const data = await res.json();
+        setSettings(data);
+        setVerifiedPat("");
+        formRef.current?.reset();
+        onClose();
+      }
+    } catch {
+      setError("Network error. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  }, [onClose]);
+
   // ── LLM handlers ──
 
   const handleVerifyLlm = useCallback(async () => {
@@ -339,12 +361,35 @@ export default function SettingsModal({ open, onClose }: Props) {
               </label>
               {statusLoading ? (
                 <p className="mt-1 text-sm text-zinc-400">Loading...</p>
-              ) : (
-                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  {settings?.has_pat
-                    ? "A PAT is configured. Enter a new one to update."
-                    : "No PAT configured. A token is required to access GitHub repositories."}
+              ) : settings?.has_pat ? (
+                <p className="mt-1 text-sm text-green-600 dark:text-green-400">
+                  A PAT is configured. Enter a new one to update.
                 </p>
+              ) : (
+                <div className="mt-1 space-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  <p>No PAT configured.</p>
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950">
+                    <p className="font-medium text-amber-800 dark:text-amber-300 mb-1">
+                      Without a PAT:
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5 text-amber-700 dark:text-amber-400">
+                      <li>Public repositories work normally (view PRs, run reviews)</li>
+                      <li>Search &amp; filter on PR lists are unavailable</li>
+                      <li>Personal repo listing is unavailable</li>
+                      <li>Review comments cannot be posted to GitHub</li>
+                      <li>Rate limited to 60 requests/hour by GitHub</li>
+                    </ul>
+                    <p className="mt-2 font-medium text-green-800 dark:text-green-300">
+                      With a PAT (classic, <code className="text-xs bg-amber-100 dark:bg-amber-900 px-1 rounded">repo</code> scope):
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5 text-green-700 dark:text-green-400">
+                      <li>Access private repositories</li>
+                      <li>Full search &amp; filter support</li>
+                      <li>Post review comments to GitHub PRs</li>
+                      <li>5,000 requests/hour rate limit</li>
+                    </ul>
+                  </div>
+                </div>
               )}
               <div className="mt-1 flex gap-2">
                 <input
@@ -409,6 +454,17 @@ export default function SettingsModal({ open, onClose }: Props) {
             >
               {loading ? "Saving..." : "Save"}
             </button>
+
+            {settings?.has_pat && (
+              <button
+                type="button"
+                onClick={handleClearPat}
+                disabled={loading}
+                className="w-full rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+              >
+                {loading ? "Clearing..." : "Clear PAT"}
+              </button>
+            )}
           </form>
         )}
 

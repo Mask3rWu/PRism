@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import OnboardingModal, { isOnboardingDismissed } from "@/components/OnboardingModal";
 import SettingsModal from "@/components/SettingsModal";
 
 export default function HeaderNav() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOnboardingDismissed()) {
+      setOnboardingOpen(true);
+    }
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
 
   return (
     <>
@@ -44,6 +56,11 @@ export default function HeaderNav() {
           </nav>
         </div>
       </header>
+      <OnboardingModal
+        open={onboardingOpen}
+        onOpenSettings={handleOpenSettings}
+        onClose={() => setOnboardingOpen(false)}
+      />
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
