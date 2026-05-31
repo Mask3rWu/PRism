@@ -34,8 +34,50 @@ export interface PaginatedProjects {
   per_page: number;
 }
 
+export interface LLMSettings {
+  provider: string;
+  endpoint: string;
+  model: string;
+  has_api_key: boolean;
+}
+
 export interface Settings {
   has_pat: boolean;
+  llm: LLMSettings | null;
+  review_count: number;
+  max_free_reviews: number;
+}
+
+export interface LLMSettingsUpdatePayload {
+  provider?: string;
+  endpoint?: string;
+  model?: string;
+  api_key?: string;
+}
+
+export interface SettingsUpdatePayload {
+  pat?: string;
+  llm?: LLMSettingsUpdatePayload;
+}
+
+export interface CallLogItem {
+  id: number;
+  call_type: "llm" | "github";
+  endpoint: string;
+  model: string | null;
+  request_summary: string | null;
+  latency_ms: number;
+  status_code: number | null;
+  error_message: string | null;
+  retry_count: number;
+  created_at: string;
+}
+
+export interface PaginatedCallLogs {
+  items: CallLogItem[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 export interface GitHubRepoItem {

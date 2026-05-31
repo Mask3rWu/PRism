@@ -80,3 +80,23 @@ class AppSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     encrypted_pat: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    encrypted_llm_api_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    llm_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="pat")
+    llm_endpoint: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    llm_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ApiCallLog(Base):
+    __tablename__ = "api_call_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    call_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(512), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(128), default=None)
+    request_summary: Mapped[str | None] = mapped_column(Text, default=None)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status_code: Mapped[int | None] = mapped_column(Integer, default=None)
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)

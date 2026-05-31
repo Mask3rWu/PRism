@@ -6,7 +6,8 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
-from backend.models import Project, Review, ReviewStatus
+from backend.core.llm_config import MAX_FREE_REVIEWS
+from backend.models import AppSettings, Project, Review, ReviewStatus
 from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem, ReviewStats
 from backend.schemas.review import ReviewResponse
@@ -293,6 +294,17 @@ async def trigger_review(
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check free review quota
+    app_settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
+    has_custom_llm = bool(app_settings and app_settings.encrypted_llm_api_key)
+    if not has_custom_llm:
+        used = app_settings.review_count if app_settings else 0
+        if used >= MAX_FREE_REVIEWS:
+            raise HTTPException(
+                status_code=402,
+                detail=f"免费 Review 次数已用完（{used}/{MAX_FREE_REVIEWS}），请在 Settings 中配置自己的 LLM API",
+            )
 
     existing = db.query(Review).filter(
         Review.project_id == project_id,

@@ -8,33 +8,45 @@ interface Props {
   onClose: () => void;
 }
 
+type Tab = "pat" | "llm";
+
 export default function SettingsModal({ open, onClose }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
+  const llmFormRef = useRef<HTMLFormElement>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("pat");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [llmVerifying, setLlmVerifying] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [error, setError] = useState("");
-  const [hasPat, setHasPat] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [verifiedPat, setVerifiedPat] = useState("");
+  const [verifiedLlm, setVerifiedLlm] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setError("");
       setLoading(false);
       setVerifying(false);
+      setLlmVerifying(false);
       setVerifiedPat("");
+      setVerifiedLlm(false);
+      setActiveTab("pat");
       return;
     }
 
     setStatusLoading(true);
     fetch("/api/settings")
       .then((res) => res.json())
-      .then((data: Settings) => setHasPat(data.has_pat))
+      .then((data: Settings) => setSettings(data))
       .catch(() => setError("Failed to load settings"))
       .finally(() => setStatusLoading(false));
   }, [open]);
 
-  const handleVerify = useCallback(async () => {
+  // ── PAT handlers ──
+
+  const handleVerifyPat = useCallback(async () => {
     const form = formRef.current;
     if (!form) return;
     const data = new FormData(form);
@@ -70,7 +82,7 @@ export default function SettingsModal({ open, onClose }: Props) {
     }
   }, []);
 
-  const handleSubmit = useCallback(
+  const handlePatSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!verifiedPat) return;
@@ -89,7 +101,8 @@ export default function SettingsModal({ open, onClose }: Props) {
           const body = await res.json();
           setError(body.detail || "Failed to save PAT");
         } else {
-          setHasPat(true);
+          const data = await res.json();
+          setSettings(data);
           formRef.current?.reset();
           setVerifiedPat("");
           onClose();
@@ -103,7 +116,105 @@ export default function SettingsModal({ open, onClose }: Props) {
     [onClose, verifiedPat],
   );
 
+  // ── LLM handlers ──
+
+  const handleVerifyLlm = useCallback(async () => {
+    const form = llmFormRef.current;
+    if (!form) return;
+    const data = new FormData(form);
+    const apiKey = (data.get("llm_api_key") as string).trim();
+    const endpoint = (data.get("llm_endpoint") as string).trim();
+    const model = (data.get("llm_model") as string).trim();
+
+    if (!apiKey || !endpoint || !model) {
+      setError("Please fill in all fields");
+      return;
+    }
+
+    setLlmVerifying(true);
+    setError("");
+    setVerifiedLlm(false);
+
+    try {
+      const res = await fetch("/api/settings/verify-llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, endpoint, model }),
+      });
+
+      if (res.ok) {
+        setVerifiedLlm(true);
+        setError("");
+      } else {
+        const body = await res.json();
+        setError(body.detail || "LLM verification failed");
+      }
+    } catch {
+      setError("Network error. Is the backend running?");
+    } finally {
+      setLlmVerifying(false);
+    }
+  }, []);
+
+  const handleLlmSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!verifiedLlm) return;
+
+      const form = llmFormRef.current;
+      if (!form) return;
+      const data = new FormData(form);
+      const apiKey = (data.get("llm_api_key") as string).trim();
+      const endpoint = (data.get("llm_endpoint") as string).trim();
+      const model = (data.get("llm_model") as string).trim();
+      const provider = (data.get("llm_provider") as string).trim();
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            llm: {
+              provider,
+              endpoint,
+              model,
+              api_key: apiKey,
+            },
+          }),
+        });
+
+        if (!res.ok) {
+          const body = await res.json();
+          setError(body.detail || "Failed to save LLM config");
+        } else {
+          const newSettings = await res.json();
+          setSettings(newSettings);
+          setVerifiedLlm(false);
+          llmFormRef.current?.reset();
+          onClose();
+        }
+      } catch {
+        setError("Network error. Is the backend running?");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onClose, verifiedLlm],
+  );
+
+  const handleLlmFieldChange = useCallback(() => {
+    setVerifiedLlm(false);
+  }, []);
+
   if (!open) return null;
+
+  const hasCustomLlm = settings?.llm?.has_api_key;
+  const reviewCount = settings?.review_count ?? 0;
+  const maxFree = settings?.max_free_reviews ?? 0;
+  const freeRemaining = Math.max(0, maxFree - reviewCount);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -118,84 +229,239 @@ export default function SettingsModal({ open, onClose }: Props) {
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Settings
         </h2>
-        <form ref={formRef} onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              GitHub Personal Access Token
-            </label>
-            {statusLoading ? (
-              <p className="mt-1 text-sm text-zinc-400">Loading...</p>
-            ) : (
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                {hasPat
-                  ? "A PAT is configured. Enter a new one to update."
-                  : "No PAT configured. A token is required to access GitHub repositories."}
-              </p>
-            )}
-            <div className="mt-1 flex gap-2">
-              <input
-                name="pat"
-                type="password"
-                required
-                onChange={() => setVerifiedPat("")}
-                className="flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                placeholder="ghp_..."
-              />
-              <button
-                type="button"
-                onClick={handleVerify}
-                disabled={verifying}
-                className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950"
-              >
-                {verifying ? "Verifying..." : "Verify"}
-              </button>
-            </div>
-            {verifiedPat && (
-              <p className="mt-1 text-xs text-green-600 dark:text-green-400">
-                Token verified successfully.
-              </p>
-            )}
-            <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
-              <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                How to get a token:
-              </p>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>
-                  Go to{" "}
-                  <a
-                    href="https://github.com/settings/tokens/new"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 underline"
-                  >
-                    GitHub &rarr; Settings &rarr; Developer settings &rarr; Personal access tokens &rarr; Tokens (classic)
-                  </a>
-                </li>
-                <li>Click "Generate new token" &rarr; "Generate new token (classic)"</li>
-                <li>Set an expiration date and select the following scopes:</li>
-              </ol>
-              <ul className="list-disc list-inside mt-1 space-y-0.5">
-                <li>
-                  <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">repo</code> — access public and private repositories
-                </li>
-                <li>
-                  <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">read:org</code> — read organization membership (optional, for org repos)
-                </li>
-              </ul>
-            </div>
-          </div>
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
+
+        {/* Tabs */}
+        <div className="mt-4 flex border-b border-zinc-200 dark:border-zinc-700">
           <button
-            type="submit"
-            disabled={loading || !verifiedPat}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            title={!verifiedPat ? "Please verify your token first" : ""}
+            type="button"
+            onClick={() => { setActiveTab("pat"); setError(""); }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "pat"
+                ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
           >
-            {loading ? "Saving..." : "Save"}
+            GitHub PAT
           </button>
-        </form>
+          <button
+            type="button"
+            onClick={() => { setActiveTab("llm"); setError(""); }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "llm"
+                ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            LLM API
+          </button>
+        </div>
+
+        {/* PAT Tab */}
+        {activeTab === "pat" && (
+          <form ref={formRef} onSubmit={handlePatSubmit} className="mt-4 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                GitHub Personal Access Token
+              </label>
+              {statusLoading ? (
+                <p className="mt-1 text-sm text-zinc-400">Loading...</p>
+              ) : (
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  {settings?.has_pat
+                    ? "A PAT is configured. Enter a new one to update."
+                    : "No PAT configured. A token is required to access GitHub repositories."}
+                </p>
+              )}
+              <div className="mt-1 flex gap-2">
+                <input
+                  name="pat"
+                  type="password"
+                  required
+                  onChange={() => setVerifiedPat("")}
+                  className="flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="ghp_..."
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyPat}
+                  disabled={verifying}
+                  className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950"
+                >
+                  {verifying ? "Verifying..." : "Verify"}
+                </button>
+              </div>
+              {verifiedPat && (
+                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                  Token verified successfully.
+                </p>
+              )}
+              <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+                <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                  How to get a token:
+                </p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>
+                    Go to{" "}
+                    <a
+                      href="https://github.com/settings/tokens/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 underline"
+                    >
+                      GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+                    </a>
+                  </li>
+                  <li>Click "Generate new token" → "Generate new token (classic)"</li>
+                  <li>Set an expiration date and select the following scopes:</li>
+                </ol>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>
+                    <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">repo</code> — access public and private repositories
+                  </li>
+                  <li>
+                    <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">read:org</code> — read organization membership (optional, for org repos)
+                  </li>
+                </ul>
+              </div>
+            </div>
+            {error && activeTab === "pat" && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+            <button
+              type="submit"
+              disabled={loading || !verifiedPat}
+              className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              title={!verifiedPat ? "Please verify your token first" : ""}
+            >
+              {loading ? "Saving..." : "Save"}
+            </button>
+          </form>
+        )}
+
+        {/* LLM API Tab */}
+        {activeTab === "llm" && (
+          <form ref={llmFormRef} onSubmit={handleLlmSubmit} className="mt-4 space-y-3">
+            {/* Status banner */}
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
+              {statusLoading ? (
+                <p className="text-zinc-400">Loading...</p>
+              ) : hasCustomLlm ? (
+                <p className="text-green-600 dark:text-green-400">
+                  Using custom LLM (unlimited reviews)
+                </p>
+              ) : freeRemaining > 0 ? (
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  Using default LLM — <span className="font-medium text-zinc-800 dark:text-zinc-200">{freeRemaining}/{maxFree}</span> free reviews remaining.
+                </p>
+              ) : (
+                <p className="text-red-600 dark:text-red-400">
+                  Free reviews exhausted (0/{maxFree}). Please configure your own LLM API below.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Provider Type
+              </label>
+              <select
+                name="llm_provider"
+                defaultValue={settings?.llm?.provider || "pat"}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                <option value="pat">Personal API Token (PAT)</option>
+              </select>
+              <p className="mt-1 text-xs text-zinc-400">
+                Use an API key from any OpenAI-compatible provider.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Base URL
+              </label>
+              <input
+                name="llm_endpoint"
+                type="text"
+                required
+                onChange={handleLlmFieldChange}
+                defaultValue={settings?.llm?.endpoint || ""}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                placeholder="https://api.deepseek.com/v1"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Model
+              </label>
+              <input
+                name="llm_model"
+                type="text"
+                required
+                onChange={handleLlmFieldChange}
+                defaultValue={settings?.llm?.model || ""}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                placeholder="deepseek-v4-pro"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                API Key
+              </label>
+              {settings?.llm?.has_api_key && (
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  A key is configured. Enter a new one to replace it.
+                </p>
+              )}
+              <div className="mt-1 flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    name="llm_api_key"
+                    type={showApiKey ? "text" : "password"}
+                    required
+                    onChange={handleLlmFieldChange}
+                    className="w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 pr-10 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    placeholder="sk-..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  >
+                    {showApiKey ? "Hide" : "Show"}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVerifyLlm}
+                  disabled={llmVerifying}
+                  className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950"
+                >
+                  {llmVerifying ? "Verifying..." : "Verify"}
+                </button>
+              </div>
+              {verifiedLlm && (
+                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                  API key verified successfully.
+                </p>
+              )}
+            </div>
+
+            {error && activeTab === "llm" && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+            <button
+              type="submit"
+              disabled={loading || !verifiedLlm}
+              className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              title={!verifiedLlm ? "Please verify your API key first" : ""}
+            >
+              {loading ? "Saving..." : "Save"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

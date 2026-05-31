@@ -26,6 +26,20 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN last_synced_at TIMESTAMP")
         conn.commit()
 
+        result = conn.exec_driver_sql("PRAGMA table_info(app_settings)")
+        columns = {row[1] for row in result}
+        if "encrypted_llm_api_key" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN encrypted_llm_api_key TEXT DEFAULT ''")
+        if "llm_provider" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN llm_provider TEXT DEFAULT 'pat'")
+        if "llm_endpoint" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN llm_endpoint TEXT DEFAULT ''")
+        if "llm_model" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN llm_model TEXT DEFAULT ''")
+        if "review_count" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN review_count INTEGER DEFAULT 0")
+        conn.commit()
+
 
 def get_db():
     db = SessionLocal()

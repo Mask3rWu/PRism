@@ -1,10 +1,16 @@
 import asyncio
+import time
 
 import httpx
 
+from backend.core.call_logger import log_api_call
 from backend.core.database import SessionLocal
 from backend.core.security import decrypt_token
 from backend.models import AppSettings
+
+GH_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0)
+GH_RETRIES = 2
+RETRYABLE_STATUS = {500, 502, 503, 504}
 
 
 def _get_decrypted_pat() -> str:
@@ -24,7 +30,7 @@ async def validate_pat_global(pat: str) -> tuple[bool, str | None]:
     url = "https://api.github.com/user"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:
             response = await client.get(url, headers=headers)
         except httpx.RequestError:
@@ -51,7 +57,7 @@ async def validate_pat(owner: str, repo: str, pat: str) -> tuple[bool, str | Non
     url = f"https://api.github.com/repos/{owner}/{repo}"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:
             response = await client.get(url, headers=headers)
         except httpx.RequestError:
@@ -93,13 +99,30 @@ async def fetch_pulls(
     }
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, headers=headers, params=params)
-            if response.status_code == 200:
-                return response.json()
-        except httpx.RequestError:
-            pass
+    for attempt in range(GH_RETRIES + 1):
+        t0 = time.time()
+        async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
+            try:
+                response = await client.get(url, headers=headers, params=params)
+                elapsed = int((time.time() - t0) * 1000)
+                if response.status_code == 200:
+                    log_api_call("github", url, latency_ms=elapsed,
+                                 status_code=200, retry_count=attempt)
+                    return response.json()
+                if response.status_code in RETRYABLE_STATUS and attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             status_code=response.status_code,
+                             error_message=f"HTTP {response.status_code}",
+                             retry_count=attempt)
+            except httpx.RequestError as e:
+                elapsed = int((time.time() - t0) * 1000)
+                if attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             error_message=str(e), retry_count=attempt)
     return None
 
 
@@ -129,7 +152,6 @@ async def search_pulls(
 
     q = "+".join(qualifiers)
 
-    # Map sort values to Search API sort options
     sort_map = {"created": "created", "updated": "updated"}
     search_sort = sort_map.get(sort, "created")
 
@@ -140,20 +162,38 @@ async def search_pulls(
     }
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, headers=headers, params=params)
-            if response.status_code != 200:
+    for attempt in range(GH_RETRIES + 1):
+        t0 = time.time()
+        async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
+            try:
+                response = await client.get(url, headers=headers, params=params)
+                elapsed = int((time.time() - t0) * 1000)
+                if response.status_code != 200:
+                    if response.status_code in RETRYABLE_STATUS and attempt < GH_RETRIES:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    log_api_call("github", url, latency_ms=elapsed,
+                                 status_code=response.status_code,
+                                 error_message=f"HTTP {response.status_code}",
+                                 retry_count=attempt)
+                    return None
+                data = response.json()
+                log_api_call("github", url, latency_ms=elapsed,
+                             status_code=200, retry_count=attempt)
+                break
+            except httpx.RequestError as e:
+                elapsed = int((time.time() - t0) * 1000)
+                if attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             error_message=str(e), retry_count=attempt)
                 return None
-            data = response.json()
-        except httpx.RequestError:
-            return None
 
     items = data.get("items", [])
     if not items:
         return {"total_count": data.get("total_count", 0), "items": []}
 
-    # Batch fetch head/base for each PR concurrently
     async def _fetch_branch(pr_number: int) -> tuple[int, str, str]:
         detail = await fetch_pr_detail(owner, repo, pr_number)
         if detail and detail.get("head") and detail.get("base"):
@@ -166,7 +206,6 @@ async def search_pulls(
         num: (head, base) for num, head, base in branch_results
     }
 
-    # Map search result items to PR-like dicts
     prs = []
     for item in items:
         pr_num = item["number"]
@@ -197,13 +236,20 @@ async def fetch_pr_detail(owner: str, repo: str, pr_number: int) -> dict | None:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
+    t0 = time.time()
+    async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:
             response = await client.get(url, headers=headers)
+            elapsed = int((time.time() - t0) * 1000)
             if response.status_code == 200:
+                log_api_call("github", url, latency_ms=elapsed, status_code=200)
                 return response.json()
-        except httpx.RequestError:
-            pass
+            log_api_call("github", url, latency_ms=elapsed,
+                         status_code=response.status_code,
+                         error_message=f"HTTP {response.status_code}")
+        except httpx.RequestError as e:
+            elapsed = int((time.time() - t0) * 1000)
+            log_api_call("github", url, latency_ms=elapsed, error_message=str(e))
     return None
 
 
@@ -215,13 +261,30 @@ async def fetch_pr_diff(owner: str, repo: str, pr_number: int) -> str | None:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3.diff"}
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, headers=headers)
-            if response.status_code == 200:
-                return response.text
-        except httpx.RequestError:
-            pass
+    for attempt in range(GH_RETRIES + 1):
+        t0 = time.time()
+        async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
+            try:
+                response = await client.get(url, headers=headers)
+                elapsed = int((time.time() - t0) * 1000)
+                if response.status_code == 200:
+                    log_api_call("github", url, latency_ms=elapsed,
+                                 status_code=200, retry_count=attempt)
+                    return response.text
+                if response.status_code in RETRYABLE_STATUS and attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             status_code=response.status_code,
+                             error_message=f"HTTP {response.status_code}",
+                             retry_count=attempt)
+            except httpx.RequestError as e:
+                elapsed = int((time.time() - t0) * 1000)
+                if attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             error_message=str(e), retry_count=attempt)
     return None
 
 
@@ -233,12 +296,32 @@ async def writeback_comment(owner: str, repo: str, pr_number: int, body: str) ->
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json={"body": body})
-            return response.status_code == 201
-        except httpx.RequestError:
-            return False
+    for attempt in range(GH_RETRIES + 1):
+        t0 = time.time()
+        async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
+            try:
+                response = await client.post(url, headers=headers, json={"body": body})
+                elapsed = int((time.time() - t0) * 1000)
+                if response.status_code == 201:
+                    log_api_call("github", url, latency_ms=elapsed,
+                                 status_code=201, retry_count=attempt)
+                    return True
+                # Only retry on server errors for POST (not client errors)
+                if response.status_code in RETRYABLE_STATUS and attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             status_code=response.status_code,
+                             error_message=f"HTTP {response.status_code}",
+                             retry_count=attempt)
+            except httpx.RequestError as e:
+                elapsed = int((time.time() - t0) * 1000)
+                if attempt < GH_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                log_api_call("github", url, latency_ms=elapsed,
+                             error_message=str(e), retry_count=attempt)
+    return False
 
 
 async def get_repo(owner: str, repo: str) -> dict | None:
@@ -249,13 +332,20 @@ async def get_repo(owner: str, repo: str) -> dict | None:
     url = f"https://api.github.com/repos/{owner}/{repo}"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
+    t0 = time.time()
+    async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:
             response = await client.get(url, headers=headers)
+            elapsed = int((time.time() - t0) * 1000)
             if response.status_code == 200:
+                log_api_call("github", url, latency_ms=elapsed, status_code=200)
                 return response.json()
-        except httpx.RequestError:
-            pass
+            log_api_call("github", url, latency_ms=elapsed,
+                         status_code=response.status_code,
+                         error_message=f"HTTP {response.status_code}")
+        except httpx.RequestError as e:
+            elapsed = int((time.time() - t0) * 1000)
+            log_api_call("github", url, latency_ms=elapsed, error_message=str(e))
     return None
 
 
@@ -268,13 +358,20 @@ async def list_user_repos(per_page: int = 100) -> list[dict] | None:
     params = {"type": "owner", "sort": "updated", "per_page": per_page}
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
+    t0 = time.time()
+    async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:
             response = await client.get(url, headers=headers, params=params)
+            elapsed = int((time.time() - t0) * 1000)
             if response.status_code == 200:
+                log_api_call("github", url, latency_ms=elapsed, status_code=200)
                 return response.json()
-        except httpx.RequestError:
-            pass
+            log_api_call("github", url, latency_ms=elapsed,
+                         status_code=response.status_code,
+                         error_message=f"HTTP {response.status_code}")
+        except httpx.RequestError as e:
+            elapsed = int((time.time() - t0) * 1000)
+            log_api_call("github", url, latency_ms=elapsed, error_message=str(e))
     return None
 
 
@@ -287,7 +384,7 @@ async def validate_public_repo(owner: str, repo: str) -> tuple[bool, str | None]
     url = f"https://api.github.com/repos/{owner}/{repo}"
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
         try:
             response = await client.get(url, headers=headers)
         except httpx.RequestError:
