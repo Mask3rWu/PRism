@@ -7,6 +7,7 @@ import httpx
 from backend.core.llm_config import get_llm_config
 
 MAX_RETRIES = 3
+MAX_JSON_RETRIES = 2
 RETRYABLE_STATUS = {500, 502, 503, 504}
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 
@@ -93,23 +94,40 @@ def _format_error(e: Exception) -> str:
 
 
 async def llm_call_json(system_prompt: str, user_prompt: str) -> tuple[dict, dict]:
-    """Call the LLM and parse the response as JSON. Returns (parsed_json, meta)."""
-    text, meta = await llm_call(system_prompt, user_prompt)
-    text = text.strip()
+    """Call the LLM and parse the response as JSON. Returns (parsed_json, meta).
 
-    # Strip <think>...</think> tags (reasoning tokens from MiniMax / DeepSeek models)
-    if text.startswith("<think>"):
-        end_idx = text.find("</think>")
-        if end_idx != -1:
-            text = text[end_idx + len("</think>"):].strip()
+    Retries the LLM call if JSON parsing fails (empty or malformed response).
+    """
+    last_text = ""
+    last_meta: dict = {}
 
-    # Strip markdown code fences if present
-    if text.startswith("```"):
-        lines = text.split("\n")
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines)
+    for json_attempt in range(MAX_JSON_RETRIES + 1):
+        text, meta = await llm_call(system_prompt, user_prompt)
+        last_meta = meta
+        text = text.strip()
 
-    return json.loads(text), meta
+        # Strip <think>...</think> tags (reasoning tokens from MiniMax / DeepSeek models)
+        if text.startswith("<think>"):
+            end_idx = text.find("</think>")
+            if end_idx != -1:
+                text = text[end_idx + len("</think>"):].strip()
+
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            lines = text.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines)
+
+        try:
+            return json.loads(text), meta
+        except json.JSONDecodeError:
+            last_text = text
+            if json_attempt < MAX_JSON_RETRIES:
+                await asyncio.sleep(1)
+                continue
+
+    preview = last_text[:200] if last_text else "(empty)"
+    raise ValueError(f"LLM returned unparseable response after {MAX_JSON_RETRIES + 1} attempts: {preview}")
