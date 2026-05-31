@@ -55,13 +55,13 @@ async def issue_detection_node(state: ReviewState) -> dict:
         db.commit()
 
         return {"issue_result": result}
-    except Exception:
+    except Exception as e:
         db.rollback()
         review = db.query(Review).filter(Review.id == review_id).first()
         if review:
             review.status = ReviewStatus.failed
             review.stage = "detecting_issues"
-            review.error_message = "Issue detection agent failed"
+            review.error_message = f"Issue detection agent failed: {e}"
             review.completed_at = datetime.now(timezone.utc)
             db.commit()
         raise

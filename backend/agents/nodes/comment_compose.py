@@ -78,13 +78,13 @@ async def comment_compose_node(state: ReviewState) -> dict:
         db.commit()
 
         return {"comment_result": result}
-    except Exception:
+    except Exception as e:
         db.rollback()
         review = db.query(Review).filter(Review.id == review_id).first()
         if review:
             review.status = ReviewStatus.failed
             review.stage = "composing_comment"
-            review.error_message = "Comment compose agent failed"
+            review.error_message = f"Comment compose agent failed: {e}"
             review.completed_at = datetime.now(timezone.utc)
             db.commit()
         raise
