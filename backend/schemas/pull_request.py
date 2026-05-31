@@ -20,6 +20,7 @@ class PullRequestItem(BaseModel):
     base_branch: str
     review_status: str
     review_id: int | None = None
+    comment_posted: bool = False
     state: str = "open"
     labels: list[LabelItem] = []
     is_draft: bool = False

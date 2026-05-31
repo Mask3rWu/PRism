@@ -44,6 +44,7 @@ class ReviewResponse(BaseModel):
     test_result: dict | None = None
     comment_content: str | None = None
     writeback_error: str | None = None
+    write_comment: bool = True
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime
@@ -51,3 +52,8 @@ class ReviewResponse(BaseModel):
 
 class ReviewDetailResponse(ReviewResponse):
     agent_timings: list[AgentTimingItem] = []
+
+
+class ReviewTriggerRequest(BaseModel):
+    enabled_agents: list[str] | None = None
+    write_comment: bool = True
