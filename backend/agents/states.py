@@ -10,3 +10,5 @@ class ReviewState(TypedDict, total=False):
     issue_result: NotRequired[dict | None]
     test_result: NotRequired[dict | None]
     comment_result: NotRequired[dict | None]
+    enabled_agents: NotRequired[list[str]]
+    write_comment: NotRequired[bool]

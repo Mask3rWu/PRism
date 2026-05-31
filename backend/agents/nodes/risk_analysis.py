@@ -29,6 +29,10 @@ async def risk_analysis_node(state: ReviewState) -> dict:
     pr_diff = state["pr_diff"]
     summary_result = state.get("summary_result") or {}
 
+    enabled = state.get("enabled_agents", ["risk_analysis", "issue_detection", "test_suggestions"])
+    if "risk_analysis" not in enabled:
+        return {"risk_result": None}
+
     db = SessionLocal()
     try:
         review = db.query(Review).filter(Review.id == review_id).first()
