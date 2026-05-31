@@ -30,12 +30,14 @@ def get_llm_config() -> dict:
     db = SessionLocal()
     try:
         s = db.query(AppSettings).filter(AppSettings.id == 1).first()
+        language = s.agent_language if s else "zh"
         if s and s.encrypted_llm_api_key and s.llm_endpoint:
             _cache = {
                 "endpoint": s.llm_endpoint,
                 "api_key": decrypt_token(s.encrypted_llm_api_key),
                 "model": s.llm_model or settings.LLM_MODEL,
                 "using_default": False,
+                "language": language,
             }
             _cache_time = now
             return _cache
@@ -52,6 +54,7 @@ def get_llm_config() -> dict:
             "api_key": free["api_key"],
             "model": free["model"],
             "using_default": True,
+            "language": "zh",
         }
         _cache_time = now
         return _cache
@@ -62,6 +65,7 @@ def get_llm_config() -> dict:
             "api_key": settings.LLM_API_KEY,
             "model": settings.LLM_MODEL,
             "using_default": True,
+            "language": "zh",
         }
         _cache_time = now
         return _cache

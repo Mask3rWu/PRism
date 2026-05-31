@@ -46,6 +46,7 @@ export interface Settings {
   llm: LLMSettings | null;
   review_count: number;
   max_free_reviews: number;
+  agent_language: "zh" | "en";
 }
 
 export interface LLMSettingsUpdatePayload {
@@ -58,6 +59,7 @@ export interface LLMSettingsUpdatePayload {
 export interface SettingsUpdatePayload {
   pat?: string;
   llm?: LLMSettingsUpdatePayload;
+  agent_language?: "zh" | "en";
 }
 
 export interface CallLogItem {

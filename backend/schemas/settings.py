@@ -13,6 +13,7 @@ class SettingsResponse(BaseModel):
     llm: LLMSettingsResponse | None = None
     review_count: int = 0
     max_free_reviews: int = 0
+    agent_language: str = "zh"
 
 
 class LLMSettingsUpdate(BaseModel):
@@ -25,6 +26,7 @@ class LLMSettingsUpdate(BaseModel):
 class SettingsUpdate(BaseModel):
     pat: str | None = None
     llm: LLMSettingsUpdate | None = None
+    agent_language: str | None = None
 
 
 class LLMVerifyRequest(BaseModel):

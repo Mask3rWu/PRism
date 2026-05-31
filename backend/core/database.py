@@ -38,6 +38,8 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN llm_model TEXT DEFAULT ''")
         if "review_count" not in columns:
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN review_count INTEGER DEFAULT 0")
+        if "agent_language" not in columns:
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN agent_language TEXT DEFAULT 'zh'")
         conn.commit()
 
         result = conn.exec_driver_sql("PRAGMA table_info(agent_timings)")

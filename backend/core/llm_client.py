@@ -21,7 +21,12 @@ async def llm_call(system_prompt: str, user_prompt: str) -> tuple[str, dict]:
     config = get_llm_config()
     endpoint = f"{config['endpoint']}/chat/completions"
     model = config["model"]
+    language = config.get("language", "zh")
     retry_errors: list[dict] = []
+
+    lang_instruction = "Reply in Chinese." if language == "zh" else "Reply in English."
+    if lang_instruction not in system_prompt:
+        system_prompt = f"{system_prompt}\n{lang_instruction}"
 
     for attempt in range(MAX_RETRIES + 1):
         t0 = time.time()

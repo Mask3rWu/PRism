@@ -90,6 +90,7 @@ class AppSettings(Base):
     llm_endpoint: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     llm_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    agent_language: Mapped[str] = mapped_column(String(8), nullable=False, default="zh")
 
 
 class ApiCallLog(Base):

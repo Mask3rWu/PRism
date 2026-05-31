@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = "pat" | "llm";
+type Tab = "general" | "pat" | "llm";
 
 export default function SettingsModal({ open, onClose }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -32,7 +32,7 @@ export default function SettingsModal({ open, onClose }: Props) {
       setLlmVerifying(false);
       setVerifiedPat("");
       setVerifiedLlm(false);
-      setActiveTab("pat");
+      setActiveTab("general");
       return;
     }
 
@@ -167,7 +167,6 @@ export default function SettingsModal({ open, onClose }: Props) {
       const apiKey = (data.get("llm_api_key") as string).trim();
       const endpoint = (data.get("llm_endpoint") as string).trim();
       const model = (data.get("llm_model") as string).trim();
-      const provider = (data.get("llm_provider") as string).trim();
 
       setLoading(true);
       setError("");
@@ -178,7 +177,7 @@ export default function SettingsModal({ open, onClose }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             llm: {
-              provider,
+              provider: "pat",
               endpoint,
               model,
               api_key: apiKey,
@@ -205,8 +204,49 @@ export default function SettingsModal({ open, onClose }: Props) {
     [onClose, verifiedLlm],
   );
 
+  const handleClearLlm = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/settings/clear-llm", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.detail || "Failed to clear LLM config");
+      } else {
+        const data = await res.json();
+        setSettings(data);
+        setVerifiedLlm(false);
+        llmFormRef.current?.reset();
+        onClose();
+      }
+    } catch {
+      setError("Network error. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  }, [onClose]);
+
   const handleLlmFieldChange = useCallback(() => {
     setVerifiedLlm(false);
+  }, []);
+
+  const handleLanguageSave = useCallback(async (lang: "zh" | "en") => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_language: lang }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   if (!open) return null;
@@ -234,6 +274,17 @@ export default function SettingsModal({ open, onClose }: Props) {
         <div className="mt-4 flex border-b border-zinc-200 dark:border-zinc-700">
           <button
             type="button"
+            onClick={() => { setActiveTab("general"); setError(""); }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "general"
+                ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            General
+          </button>
+          <button
+            type="button"
             onClick={() => { setActiveTab("pat"); setError(""); }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === "pat"
@@ -255,6 +306,29 @@ export default function SettingsModal({ open, onClose }: Props) {
             LLM API
           </button>
         </div>
+
+        {/* General Tab */}
+        {activeTab === "general" && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Agent</h3>
+              <div className="mt-2 flex items-center justify-between">
+                <label className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Output Language
+                </label>
+                <select
+                  value={settings?.agent_language || "zh"}
+                  onChange={(e) => handleLanguageSave(e.target.value as "zh" | "en")}
+                  disabled={loading}
+                  className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                >
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PAT Tab */}
         {activeTab === "pat" && (
@@ -351,29 +425,17 @@ export default function SettingsModal({ open, onClose }: Props) {
                 </p>
               ) : freeRemaining > 0 ? (
                 <p className="text-zinc-600 dark:text-zinc-400">
-                  Using default LLM — <span className="font-medium text-zinc-800 dark:text-zinc-200">{freeRemaining}/{maxFree}</span> free reviews remaining.
+                  Using free LLM —{" "}
+                  <span className="font-medium text-zinc-800 dark:text-zinc-200">{freeRemaining}</span>
+                  {" "}of{" "}
+                  <span className="font-medium text-zinc-800 dark:text-zinc-200">{maxFree}</span>
+                  {" "}free reviews remaining.
                 </p>
               ) : (
                 <p className="text-red-600 dark:text-red-400">
-                  Free reviews exhausted (0/{maxFree}). Please configure your own LLM API below.
+                  Free reviews exhausted. Please configure your own LLM API below.
                 </p>
               )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Provider Type
-              </label>
-              <select
-                name="llm_provider"
-                defaultValue={settings?.llm?.provider || "pat"}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              >
-                <option value="pat">Personal API Token (PAT)</option>
-              </select>
-              <p className="mt-1 text-xs text-zinc-400">
-                Use an API key from any OpenAI-compatible provider.
-              </p>
             </div>
 
             <div>
@@ -389,6 +451,9 @@ export default function SettingsModal({ open, onClose }: Props) {
                 className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 placeholder="https://api.deepseek.com/v1"
               />
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                Supports any OpenAI-compatible provider.
+              </p>
             </div>
 
             <div>
@@ -460,6 +525,17 @@ export default function SettingsModal({ open, onClose }: Props) {
             >
               {loading ? "Saving..." : "Save"}
             </button>
+
+            {hasCustomLlm && (
+              <button
+                type="button"
+                onClick={handleClearLlm}
+                disabled={loading}
+                className="w-full rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+              >
+                {loading ? "Clearing..." : "Clear Custom LLM"}
+              </button>
+            )}
           </form>
         )}
       </div>

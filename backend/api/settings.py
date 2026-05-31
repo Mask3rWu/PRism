@@ -45,6 +45,7 @@ def get_settings(db: Session = Depends(get_db)):
         llm=llm,
         review_count=s.review_count,
         max_free_reviews=MAX_FREE_REVIEWS,
+        agent_language=s.agent_language or "zh",
     )
 
 
@@ -115,6 +116,10 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
             s.encrypted_llm_api_key = encrypt_token(body.llm.api_key)
         invalidate_llm_cache()
 
+    # Update agent language
+    if body.agent_language is not None:
+        s.agent_language = body.agent_language
+
     db.commit()
     db.refresh(s)
 
@@ -130,6 +135,33 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
         llm=llm,
         review_count=s.review_count,
         max_free_reviews=MAX_FREE_REVIEWS,
+        agent_language=s.agent_language or "zh",
+    )
+
+
+@router.post("/clear-llm", response_model=SettingsResponse)
+def clear_llm(db: Session = Depends(get_db)):
+    """Remove the custom LLM configuration, reverting to free LLM."""
+    s = _get_or_create_settings(db)
+    s.encrypted_llm_api_key = ""
+    s.llm_endpoint = ""
+    s.llm_model = ""
+    invalidate_llm_cache()
+    db.commit()
+    db.refresh(s)
+
+    llm = LLMSettingsResponse(
+        provider=s.llm_provider or "pat",
+        endpoint=s.llm_endpoint,
+        model=s.llm_model,
+        has_api_key=False,
+    )
+    return SettingsResponse(
+        has_pat=bool(s.encrypted_pat),
+        llm=llm,
+        review_count=s.review_count,
+        max_free_reviews=MAX_FREE_REVIEWS,
+        agent_language=s.agent_language or "zh",
     )
 
 
