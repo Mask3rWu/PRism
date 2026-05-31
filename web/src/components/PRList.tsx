@@ -796,7 +796,7 @@ export default function PRList({ project, initialPRs, initialTotal, initialPage,
                     </span>
                     <span>{pr.author}</span>
                     <span>·</span>
-                    <span title={pr.created_at}>opened {relativeTime(pr.created_at)}</span>
+                    <span title={pr.created_at}>opened <span suppressHydrationWarning>{relativeTime(pr.created_at)}</span></span>
                     <span>·</span>
                     <span className="min-w-0 max-w-[240px] truncate">{pr.head_branch}</span>
                     {/* Spacer */}
