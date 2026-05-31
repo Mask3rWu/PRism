@@ -25,6 +25,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     repo_owner: Mapped[str] = mapped_column(String(255), nullable=False)
     repo_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    repo_url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     encrypted_pat: Mapped[str] = mapped_column(Text, nullable=True, default="")
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     is_seeded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
