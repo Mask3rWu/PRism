@@ -1,4 +1,5 @@
-from typing import NotRequired, TypedDict
+from operator import add
+from typing import Annotated, NotRequired, TypedDict
 
 
 class ReviewState(TypedDict, total=False):
@@ -10,5 +11,10 @@ class ReviewState(TypedDict, total=False):
     issue_result: NotRequired[dict | None]
     test_result: NotRequired[dict | None]
     comment_result: NotRequired[dict | None]
+    routing_plan: NotRequired[dict]
+    selected_agents: NotRequired[list[str]]
+    active_expert: NotRequired[str]
+    expert_results: Annotated[list[dict], add]
+    final_report: NotRequired[dict | None]
     enabled_agents: NotRequired[list[str]]
     write_comment: NotRequired[bool]

@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from backend.agents.routing import DEFAULT_ENABLED_AGENTS, validate_enabled_agents
 from backend.core.database import get_db
 from backend.core.llm_config import MAX_FREE_REVIEWS
 from backend.models import AppSettings, Project, Review, ReviewStatus
@@ -396,9 +397,14 @@ async def trigger_review(
             settings_agents = json.loads(app_settings.enabled_agents or "[]")
         except (json.JSONDecodeError, TypeError):
             settings_agents = []
-        effective_agents = settings_agents if settings_agents else ["risk_analysis", "issue_detection", "test_suggestions"]
+        effective_agents = settings_agents if settings_agents else DEFAULT_ENABLED_AGENTS
     else:
         effective_agents = body.enabled_agents
+
+    try:
+        effective_agents = validate_enabled_agents(effective_agents)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     background_tasks.add_task(
         _run_review_background,

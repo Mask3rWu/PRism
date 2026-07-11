@@ -191,6 +191,45 @@ export interface TestResult {
   suggested_tests: TestSuggestion[];
 }
 
+export interface RoutingPlan {
+  changed_files: string[];
+  selected_agents: string[];
+  reasons: Record<string, string[]>;
+}
+
+export interface ReviewFinding {
+  id: string;
+  agent: string;
+  severity: string;
+  category: string;
+  title: string;
+  reason: string;
+  file: string;
+  line_number: number;
+  evidence: string;
+  fix_suggestion: string;
+  verification: string;
+  confidence: string;
+}
+
+export interface FixSuggestion {
+  finding_id: string;
+  file: string;
+  line_number: number;
+  suggestion: string;
+  verification: string;
+}
+
+export interface FinalReport {
+  routing_plan: RoutingPlan;
+  findings: ReviewFinding[];
+  fix_suggestions: FixSuggestion[];
+  summary: {
+    total_findings: number;
+    by_severity: Record<string, number>;
+  };
+}
+
 export interface ReviewDetail {
   id: number;
   project_id: number;
@@ -203,6 +242,9 @@ export interface ReviewDetail {
   risk_result: RiskResult | null;
   issue_result: IssueResult | null;
   test_result: TestResult | null;
+  routing_plan: RoutingPlan | null;
+  expert_results: Record<string, unknown>[] | null;
+  final_report: FinalReport | null;
   comment_content: string | null;
   writeback_error: string | null;
   write_comment: boolean;

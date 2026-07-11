@@ -44,6 +44,9 @@ class ReviewResponse(BaseModel):
     risk_result: dict | None = None
     issue_result: dict | None = None
     test_result: dict | None = None
+    routing_plan: dict | None = None
+    expert_results: list[dict] | None = None
+    final_report: dict | None = None
     comment_content: str | None = None
     writeback_error: str | None = None
     write_comment: bool = True

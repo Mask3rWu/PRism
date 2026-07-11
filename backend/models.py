@@ -53,6 +53,9 @@ class Review(Base):
     risk_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     issue_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     test_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    routing_plan: Mapped[dict | None] = mapped_column(JSON, default=None)
+    expert_results: Mapped[list | None] = mapped_column(JSON, default=None)
+    final_report: Mapped[dict | None] = mapped_column(JSON, default=None)
     diff_content: Mapped[str | None] = mapped_column(Text, default=None)
     comment_content: Mapped[str | None] = mapped_column(Text, default=None)
     writeback_error: Mapped[str | None] = mapped_column(Text, default=None)
@@ -93,7 +96,7 @@ class AppSettings(Base):
     llm_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     agent_language: Mapped[str] = mapped_column(String(8), nullable=False, default="zh")
-    enabled_agents: Mapped[str] = mapped_column(Text, default='["risk_analysis", "issue_detection", "test_suggestions"]', nullable=False)
+    enabled_agents: Mapped[str] = mapped_column(Text, default='["risk_analysis", "issue_detection", "test_suggestions", "security_review", "performance_review", "business_compliance_review"]', nullable=False)
 
 
 class ApiCallLog(Base):

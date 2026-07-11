@@ -10,9 +10,7 @@ from backend.models import AgentTiming, Review, ReviewStatus
 def _load_prompt(
     project_description: str,
     pr_summary: str,
-    risk_analysis: str,
-    issue_detection: str,
-    test_suggestions: str,
+    review_report: str,
 ) -> tuple[str, str]:
     import os
 
@@ -24,9 +22,7 @@ def _load_prompt(
     user_prompt = (
         template.replace("{project_description}", project_description)
         .replace("{pr_summary}", pr_summary)
-        .replace("{risk_analysis}", risk_analysis)
-        .replace("{issue_detection}", issue_detection)
-        .replace("{test_suggestions}", test_suggestions)
+        .replace("{review_report}", review_report)
     )
     return system_prompt, user_prompt
 
@@ -36,9 +32,7 @@ async def comment_compose_node(state: ReviewState) -> dict:
     project_description = state["project_description"]
     pr_diff = state["pr_diff"]
     summary_result = state.get("summary_result") or {}
-    risk_result = state.get("risk_result") or {}
-    issue_result = state.get("issue_result") or {}
-    test_result = state.get("test_result") or {}
+    final_report = state.get("final_report") or {}
 
     db = SessionLocal()
     try:
@@ -58,12 +52,10 @@ async def comment_compose_node(state: ReviewState) -> dict:
         db.commit()
 
         pr_summary = json.dumps(summary_result, ensure_ascii=False)
-        risk_analysis = json.dumps(risk_result, ensure_ascii=False)
-        issue_detection = json.dumps(issue_result, ensure_ascii=False)
-        test_suggestions = json.dumps(test_result, ensure_ascii=False)
+        review_report = json.dumps(final_report, ensure_ascii=False)
 
         system_prompt, user_prompt = _load_prompt(
-            project_description, pr_summary, risk_analysis, issue_detection, test_suggestions
+            project_description, pr_summary, review_report
         )
         result, meta = await llm_call_json(system_prompt, user_prompt)
 

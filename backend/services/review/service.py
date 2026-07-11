@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from backend.agents.review_graph import review_graph
+from backend.agents.routing import DEFAULT_ENABLED_AGENTS
 from backend.agents.states import ReviewState
 from backend.core.config import settings
 from backend.core.database import SessionLocal
@@ -53,7 +54,7 @@ async def _run_review_background(
                 "project_description": project.description or "",
                 "pr_diff": diff,
                 "review_id": review_id,
-                "enabled_agents": enabled_agents or ["risk_analysis", "issue_detection", "test_suggestions"],
+                "enabled_agents": enabled_agents if enabled_agents is not None else DEFAULT_ENABLED_AGENTS,
                 "write_comment": write_comment,
             }
             try:

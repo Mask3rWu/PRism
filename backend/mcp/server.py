@@ -159,6 +159,33 @@ async def get_review_detail(review_id: int) -> str:
         return str(e)
 
 
+@mcp.tool()
+async def get_fix_suggestions(review_id: int) -> str:
+    """Get structured, actionable repair suggestions for a completed PR review.
+
+    Args:
+        review_id: Review ID returned by list_pull_requests.
+    """
+    client = _get_client()
+    try:
+        data = await client.get(f"/api/reviews/{review_id}")
+        report = data.get("final_report")
+        if not report:
+            return "This review has no structured repair report. Run a new review after upgrading PRism."
+        return json.dumps(
+            {
+                "review_id": review_id,
+                "routing_plan": report.get("routing_plan", {}),
+                "findings": report.get("findings", []),
+                "fix_suggestions": report.get("fix_suggestions", []),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    except PrismError as e:
+        return str(e)
+
+
 def main() -> None:
     mcp.run(transport="stdio")
 

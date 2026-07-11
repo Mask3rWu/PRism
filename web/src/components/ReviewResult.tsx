@@ -42,6 +42,10 @@ const AGENT_LABELS: Record<string, string> = {
   risk_analysis: "Risk Analysis",
   issue_detection: "Issue Detection",
   test_suggestions: "Test Suggestions",
+  security_review: "Security Review",
+  performance_review: "Performance Review",
+  business_compliance_review: "Business & Compliance Review",
+  aggregate_results: "Result Aggregation",
   comment_compose: "Comment Compose",
 };
 
@@ -164,7 +168,11 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
     ...review.summary_result,
     files_changed: review.summary_result.files_changed ?? [],
   };
-  const rawRisk = review.risk_result as Record<string, any> | null;
+  const rawRisk = review.risk_result as {
+    risk_items?: RiskItem[];
+    risks?: RiskItem[];
+    overall_risk?: string;
+  } | null;
   const riskItems: RiskItem[] = rawRisk?.risk_items ?? rawRisk?.risks ?? [];
   const overallRisk: string = rawRisk?.overall_risk
     ?? (riskItems.some((r) => r.level === "high") ? "high"
@@ -173,9 +181,14 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
       : "unknown");
   const riskResult = rawRisk && { ...rawRisk, risk_items: riskItems, overall_risk: overallRisk };
 
-  const rawTest = review.test_result as Record<string, any> | null;
+  const rawTest = review.test_result as {
+    suggested_tests?: TestSuggestion[];
+    tests?: TestSuggestion[];
+  } | null;
   const suggestedTests: TestSuggestion[] = rawTest?.suggested_tests ?? rawTest?.tests ?? [];
   const testResult = rawTest && { ...rawTest, suggested_tests: suggestedTests };
+  const finalReport = review.final_report;
+  const routingPlan = finalReport?.routing_plan ?? review.routing_plan;
 
   const statusStyle =
     STATUS_STYLES[review.status] ||
@@ -321,6 +334,52 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
                     </code>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Dynamic routing and structured repairs */}
+      {finalReport && (
+        <CollapsibleSection
+          title="Dynamic Review Plan"
+          icon="Route"
+          badge={
+            <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              {finalReport.summary.total_findings} findings
+            </span>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Selected Experts</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(routingPlan?.selected_agents ?? []).map((agent) => (
+                  <span key={agent} className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                    {AGENT_LABELS[agent] ?? agent}
+                  </span>
+                ))}
+              </div>
+              {(routingPlan?.selected_agents ?? []).map((agent) => (
+                <p key={`${agent}-reason`} className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{AGENT_LABELS[agent] ?? agent}: </span>
+                  {(routingPlan?.reasons?.[agent] ?? []).join(" ")}
+                </p>
+              ))}
+            </div>
+
+            {finalReport.fix_suggestions.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Repair Suggestions</h3>
+                {finalReport.fix_suggestions.map((suggestion) => (
+                  <div key={suggestion.finding_id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                    <p className="text-sm text-zinc-800 dark:text-zinc-200">{suggestion.suggestion}</p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      {suggestion.file}{suggestion.line_number ? `:${suggestion.line_number}` : ""} - Verify: {suggestion.verification}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
           </div>

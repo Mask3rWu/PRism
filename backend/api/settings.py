@@ -5,6 +5,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from backend.agents.routing import DEFAULT_ENABLED_AGENTS, validate_enabled_agents
 from backend.core.database import get_db
 from backend.core.llm_config import MAX_FREE_REVIEWS, invalidate_llm_cache
 from backend.core.security import encrypt_token
@@ -45,7 +46,7 @@ def get_settings(db: Session = Depends(get_db)):
     try:
         enabled_agents_list = json.loads(s.enabled_agents or "[]")
     except (json.JSONDecodeError, TypeError):
-        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
+        enabled_agents_list = DEFAULT_ENABLED_AGENTS
     return SettingsResponse(
         has_pat=bool(s.encrypted_pat),
         llm=llm,
@@ -129,7 +130,10 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
 
     # Update enabled agents
     if body.enabled_agents is not None:
-        s.enabled_agents = json.dumps(body.enabled_agents)
+        try:
+            s.enabled_agents = json.dumps(validate_enabled_agents(body.enabled_agents))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     db.commit()
     db.refresh(s)
@@ -144,7 +148,7 @@ async def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     try:
         enabled_agents_list = json.loads(s.enabled_agents or "[]")
     except (json.JSONDecodeError, TypeError):
-        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
+        enabled_agents_list = DEFAULT_ENABLED_AGENTS
     return SettingsResponse(
         has_pat=bool(s.encrypted_pat),
         llm=llm,
@@ -173,7 +177,7 @@ def clear_pat(db: Session = Depends(get_db)):
     try:
         enabled_agents_list = json.loads(s.enabled_agents or "[]")
     except (json.JSONDecodeError, TypeError):
-        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
+        enabled_agents_list = DEFAULT_ENABLED_AGENTS
     return SettingsResponse(
         has_pat=False,
         llm=llm,
@@ -204,7 +208,7 @@ def clear_llm(db: Session = Depends(get_db)):
     try:
         enabled_agents_list = json.loads(s.enabled_agents or "[]")
     except (json.JSONDecodeError, TypeError):
-        enabled_agents_list = ["risk_analysis", "issue_detection", "test_suggestions"]
+        enabled_agents_list = DEFAULT_ENABLED_AGENTS
     return SettingsResponse(
         has_pat=bool(s.encrypted_pat),
         llm=llm,

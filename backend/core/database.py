@@ -14,6 +14,17 @@ class Base(DeclarativeBase):
 def _migrate_db():
     """Add missing columns to existing tables (no Alembic)."""
     with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        # A new database has no tables yet; Base.metadata.create_all() runs
+        # immediately after this migration hook during application startup.
+        if not tables:
+            return
+
         result = conn.exec_driver_sql("PRAGMA table_info(projects)")
         columns = {row[1] for row in result}
         if "tags" not in columns:
@@ -43,11 +54,12 @@ def _migrate_db():
         if "agent_language" not in columns:
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN agent_language TEXT DEFAULT 'zh'")
         if "enabled_agents" not in columns:
-            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN enabled_agents TEXT DEFAULT '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]'")
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN enabled_agents TEXT DEFAULT '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\"]'")
         # Fix existing rows that have the old empty default
         conn.exec_driver_sql(
-            "UPDATE app_settings SET enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]' "
-            "WHERE enabled_agents = '[]' OR enabled_agents IS NULL OR enabled_agents = ''"
+            "UPDATE app_settings SET enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\"]' "
+            "WHERE enabled_agents = '[]' OR enabled_agents IS NULL OR enabled_agents = '' "
+            "OR enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]'"
         )
         conn.commit()
 
@@ -55,6 +67,12 @@ def _migrate_db():
         columns = {row[1] for row in result}
         if "write_comment" not in columns:
             conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN write_comment BOOLEAN DEFAULT 1")
+        if "routing_plan" not in columns:
+            conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN routing_plan JSON")
+        if "expert_results" not in columns:
+            conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN expert_results JSON")
+        if "final_report" not in columns:
+            conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN final_report JSON")
         conn.commit()
 
         result = conn.exec_driver_sql("PRAGMA table_info(agent_timings)")
