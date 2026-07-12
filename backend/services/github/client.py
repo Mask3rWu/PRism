@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import time
 
 import httpx
@@ -286,6 +287,83 @@ async def fetch_pr_diff(owner: str, repo: str, pr_number: int) -> str | None:
                 log_api_call("github", url, latency_ms=elapsed,
                              error_message=str(e), retry_count=attempt)
     return None
+
+
+async def fetch_repository_file(owner: str, repo: str, path: str, ref: str) -> str | None:
+    """Read one text file at a fixed Git ref. Used only by review-scoped tools."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    headers = _gh_headers()
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
+            response = await client.get(url, headers=headers, params={"ref": ref})
+        elapsed = int((time.time() - t0) * 1000)
+        if response.status_code != 200:
+            log_api_call("github", url, latency_ms=elapsed, status_code=response.status_code,
+                         error_message=f"HTTP {response.status_code}")
+            return None
+        data = response.json()
+        if not isinstance(data, dict) or data.get("type") != "file":
+            log_api_call("github", url, latency_ms=elapsed, status_code=200,
+                         error_message="Path is not a file")
+            return None
+        encoded = data.get("content", "")
+        if not isinstance(encoded, str):
+            return None
+        content = base64.b64decode(encoded.replace("\n", ""), validate=False)
+        text = content.decode("utf-8", errors="replace")
+        log_api_call("github", url, latency_ms=elapsed, status_code=200)
+        return text
+    except (httpx.RequestError, ValueError) as exc:
+        elapsed = int((time.time() - t0) * 1000)
+        log_api_call("github", url, latency_ms=elapsed, error_message=str(exc))
+        return None
+
+
+async def search_repository_code(
+    owner: str,
+    repo: str,
+    query: str,
+    *,
+    path_glob: str = "",
+    max_results: int = 10,
+) -> list[dict] | None:
+    """Search code in one repository and return paths only, never arbitrary URLs."""
+    if not _get_decrypted_pat():
+        return None
+    sanitized = " ".join(query.split())
+    if not sanitized or len(sanitized) > 200:
+        return []
+    qualifiers = [sanitized, f"repo:{owner}/{repo}"]
+    if path_glob:
+        qualifiers.append(f"path:{path_glob}")
+    url = "https://api.github.com/search/code"
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=GH_TIMEOUT) as client:
+            response = await client.get(
+                url,
+                headers=_gh_headers("application/vnd.github+json"),
+                params={"q": " ".join(qualifiers), "per_page": max(1, min(max_results, 20))},
+            )
+        elapsed = int((time.time() - t0) * 1000)
+        if response.status_code != 200:
+            log_api_call("github", url, latency_ms=elapsed, status_code=response.status_code,
+                         error_message=f"HTTP {response.status_code}")
+            return None
+        data = response.json()
+        items = data.get("items", []) if isinstance(data, dict) else []
+        results = [
+            {"path": str(item.get("path", "")), "sha": str(item.get("sha", ""))}
+            for item in items
+            if isinstance(item, dict) and item.get("path")
+        ]
+        log_api_call("github", url, latency_ms=elapsed, status_code=200)
+        return results
+    except httpx.RequestError as exc:
+        elapsed = int((time.time() - t0) * 1000)
+        log_api_call("github", url, latency_ms=elapsed, error_message=str(exc))
+        return None
 
 
 async def writeback_comment(owner: str, repo: str, pr_number: int, body: str) -> bool:

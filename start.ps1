@@ -1,5 +1,5 @@
 param(
-    [string]$PythonExe = $env:PRISM_PYTHON
+    [string]$PythonExe
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $WebRoot = Join-Path $ProjectRoot "web"
 $RuntimeRoot = Join-Path $ProjectRoot ".runtime"
+$CondaEnvironment = "prism-py311"
 $BackendPort = 8000
 $FrontendPort = 3000
 
@@ -20,18 +21,21 @@ function Resolve-Python {
         return (Resolve-Path -LiteralPath $RequestedPython).Path
     }
 
-    if ($env:CONDA_PREFIX) {
-        $CondaPython = Join-Path $env:CONDA_PREFIX "python.exe"
-        if (Test-Path -LiteralPath $CondaPython) {
-            return (Resolve-Path -LiteralPath $CondaPython).Path
-        }
+    $CondaCommand = Get-Command conda -ErrorAction SilentlyContinue
+    if (-not $CondaCommand) {
+        throw "Conda was not found. Install Conda and create the $CondaEnvironment environment."
     }
 
-    $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $PythonCommand) {
-        throw "Python was not found. Activate the PRism environment or pass -PythonExe <path-to-python>."
+    $CondaBase = (& $CondaCommand.Source info --base).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $CondaBase) {
+        throw "Could not determine the Conda installation directory."
     }
-    return $PythonCommand.Source
+
+    $CondaPython = Join-Path $CondaBase "envs\$CondaEnvironment\python.exe"
+    if (-not (Test-Path -LiteralPath $CondaPython)) {
+        throw "Conda environment '$CondaEnvironment' was not found at $CondaPython. Run: conda create -n $CondaEnvironment python=3.11 -y"
+    }
+    return (Resolve-Path -LiteralPath $CondaPython).Path
 }
 
 function Get-ListeningProcess {

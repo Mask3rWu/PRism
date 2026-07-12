@@ -41,6 +41,7 @@ class ReviewResponse(BaseModel):
     stage: str | None = None
     error_message: str | None = None
     summary_result: dict | None = None
+    coordinator_result: dict | None = None
     risk_result: dict | None = None
     issue_result: dict | None = None
     test_result: dict | None = None

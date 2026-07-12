@@ -8,7 +8,14 @@ from backend.core.llm_client import llm_call_json
 from backend.models import AgentTiming, Review, ReviewStatus
 
 
-def _build_prompt(agent: str, project_description: str, summary: dict, pr_diff: str) -> tuple[str, str]:
+def _build_prompt(
+    agent: str,
+    project_description: str,
+    summary: dict,
+    common_context: dict,
+    expert_context: dict,
+    pr_diff: str,
+) -> tuple[str, str]:
     definition = EXPERTS[agent]
     system_prompt = "You are a code review specialist. Always respond with valid JSON only."
     user_prompt = f"""You are the {definition.label} specialist. Review the PR change below.
@@ -20,6 +27,12 @@ Project context:
 
 PR summary:
 {json.dumps(summary, ensure_ascii=False)}
+
+Common facts collected by the Coordinator:
+{json.dumps(common_context, ensure_ascii=False)}
+
+Evidence package prepared for your specialty:
+{json.dumps(expert_context, ensure_ascii=False)}
 
 PR diff:
 {pr_diff}
@@ -68,6 +81,8 @@ async def expert_review_node(state: ReviewState) -> dict:
             agent,
             state.get("project_description", ""),
             state.get("summary_result") or {},
+            state.get("common_context") or {},
+            (state.get("expert_contexts") or {}).get(agent, {}),
             state.get("pr_diff", ""),
         )
         raw_result, meta = await llm_call_json(system_prompt, user_prompt)

@@ -50,6 +50,7 @@ class Review(Base):
     stage: Mapped[str | None] = mapped_column(String(64), default=None)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
     summary_result: Mapped[dict | None] = mapped_column(JSON, default=None)
+    coordinator_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     risk_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     issue_result: Mapped[dict | None] = mapped_column(JSON, default=None)
     test_result: Mapped[dict | None] = mapped_column(JSON, default=None)

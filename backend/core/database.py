@@ -69,6 +69,8 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN write_comment BOOLEAN DEFAULT 1")
         if "routing_plan" not in columns:
             conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN routing_plan JSON")
+        if "coordinator_result" not in columns:
+            conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN coordinator_result JSON")
         if "expert_results" not in columns:
             conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN expert_results JSON")
         if "final_report" not in columns:
