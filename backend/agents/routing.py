@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backend.agents.tools.change_inventory import is_docs_path
+
 
 @dataclass(frozen=True)
 class ExpertDefinition:
@@ -19,6 +21,8 @@ EXPERTS: dict[str, ExpertDefinition] = {
     "security_review": ExpertDefinition("security_review", "Security Review", "authentication, authorization, secrets, and untrusted input"),
     "performance_review": ExpertDefinition("performance_review", "Performance Review", "queries, I/O, algorithms, and resource use"),
     "business_compliance_review": ExpertDefinition("business_compliance_review", "Business & Compliance Review", "business rules, auditability, privacy, and retention"),
+    "docs_review": ExpertDefinition("docs_review", "Documentation Review", "documentation accuracy and consistency with actual behavior, including API signatures, commands, configuration, examples, version notes, and repository-relative links"),
+    "general_review": ExpertDefinition("general_review", "General Change Review", "cross-file consistency, user-visible behavior, configuration and dependency impact, and changed artifacts that do not fit a specialist focus"),
 }
 
 DEFAULT_ENABLED_AGENTS = list(EXPERTS)
@@ -63,9 +67,13 @@ def build_routing_plan(pr_diff: str, enabled_agents: list[str] | None, project_d
             reasons.setdefault(agent, []).append(reason)
 
     code_files = [path for path in files if _is_code_file(path)]
+    docs_files = [path for path in files if is_docs_path(path)]
     if code_files:
         select("issue_detection", f"Detected source or configuration changes in {len(code_files)} file(s).")
         select("test_suggestions", "Source changes require regression-test coverage review.")
+
+    if docs_files:
+        select("docs_review", f"Detected documentation changes in {len(docs_files)} file(s).")
 
     if any(path.lower().endswith((".sql", ".yaml", ".yml", ".tf", ".toml", ".ini")) for path in files):
         select("risk_analysis", "Detected infrastructure, database, or runtime configuration changes.")
