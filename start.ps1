@@ -123,31 +123,34 @@ if (-not (Test-Path -LiteralPath (Join-Path $WebRoot "node_modules"))) {
     }
 }
 
-$BackendLog = Join-Path $RuntimeRoot "backend.log"
-$BackendErrorLog = Join-Path $RuntimeRoot "backend.error.log"
-$FrontendLog = Join-Path $RuntimeRoot "frontend.log"
-$FrontendErrorLog = Join-Path $RuntimeRoot "frontend.error.log"
-
 Write-Host "Starting PRism backend on http://127.0.0.1:$BackendPort ..."
-Start-Process -FilePath $PythonExe `
+$BackendProcess = Start-Process -FilePath $PythonExe `
     -ArgumentList @("-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "$BackendPort") `
     -WorkingDirectory $ProjectRoot `
-    -WindowStyle Hidden `
-    -RedirectStandardOutput $BackendLog `
-    -RedirectStandardError $BackendErrorLog | Out-Null
+    -NoNewWindow `
+    -PassThru
 
 Wait-ForHttpEndpoint -Url "http://127.0.0.1:$BackendPort/health" -Name "Backend"
 
 Write-Host "Starting PRism frontend on http://127.0.0.1:$FrontendPort ..."
-Start-Process -FilePath $NpmCommand.Source `
+$FrontendProcess = Start-Process -FilePath $NpmCommand.Source `
     -ArgumentList @("run", "dev", "--", "--hostname", "127.0.0.1", "--port", "$FrontendPort") `
     -WorkingDirectory $WebRoot `
-    -WindowStyle Hidden `
-    -RedirectStandardOutput $FrontendLog `
-    -RedirectStandardError $FrontendErrorLog | Out-Null
+    -NoNewWindow `
+    -PassThru
 
 Wait-ForHttpEndpoint -Url "http://127.0.0.1:$FrontendPort" -Name "Frontend"
 
 Write-Host ""
 Write-Host "PRism is running: http://127.0.0.1:$FrontendPort"
-Write-Host "Logs: $RuntimeRoot"
+Write-Host "Press Ctrl+C to stop PRism."
+
+try {
+    Wait-Process -Id $BackendProcess.Id, $FrontendProcess.Id
+} finally {
+    foreach ($Process in @($BackendProcess, $FrontendProcess)) {
+        if ($Process -and -not $Process.HasExited) {
+            Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+}

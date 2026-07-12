@@ -11,7 +11,7 @@ def _load_prompt(project_description: str, pr_summary: str, pr_diff: str) -> tup
     import os
 
     prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "risk_analysis.md")
-    with open(prompt_path) as f:
+    with open(prompt_path, encoding="utf-8") as f:
         template = f.read()
 
     system_prompt = "You are a code review assistant. Always respond with valid JSON only."
