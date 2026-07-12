@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GitHubRepoItem } from "@/types";
 
@@ -21,7 +21,7 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
 
   // Personal repo state
   const [repos, setRepos] = useState<GitHubRepoItem[]>([]);
-  const [reposLoading, setReposLoading] = useState(false);
+  const [reposLoading, setReposLoading] = useState(initialTab === "personal");
   const [search, setSearch] = useState("");
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepoItem | null>(null);
 
@@ -37,27 +37,9 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
   const [confirmTags, setConfirmTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
+  // Fetch repos after the personal tab is rendered.
   useEffect(() => {
-    if (!open) {
-      setError("");
-      setLoading(false);
-      setSelectedRepo(null);
-      setValidatedRepo(null);
-      setUrl("");
-      setSearch("");
-      setStep("select");
-      setConfirmTags([]);
-      setTagInput("");
-      return;
-    }
-    setTab(initialTab);
-  }, [open, initialTab]);
-
-  // Fetch repos when personal tab opens
-  useEffect(() => {
-    if (!open || tab !== "personal") return;
-    setReposLoading(true);
-    setError("");
+    if (tab !== "personal") return;
     fetch("/api/github/repos")
       .then((res) => {
         if (!res.ok) return res.json().then((d) => Promise.reject(d.detail));
@@ -66,7 +48,7 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
       .then((data: GitHubRepoItem[]) => setRepos(data))
       .catch((e) => setError(typeof e === "string" ? e : "Failed to load repositories"))
       .finally(() => setReposLoading(false));
-  }, [open, tab]);
+  }, [tab]);
 
   const filteredRepos = repos.filter(
     (r) =>
@@ -152,7 +134,7 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
     } finally {
       setLoading(false);
     }
-  }, [tab, selectedRepo, validatedRepo, projectName, description, onClose, router]);
+  }, [tab, selectedRepo, validatedRepo, projectName, description, confirmTags, onClose, router]);
 
   const handleBack = () => {
     setStep("select");
@@ -193,6 +175,9 @@ export default function AddRepoModal({ open, initialTab, onClose, existingRepos 
     setSearch("");
     setConfirmTags([]);
     setTagInput("");
+    if (t === "personal") {
+      setReposLoading(true);
+    }
   };
 
   if (!open) return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Project, ProjectCreatePayload, ProjectUpdatePayload } from "@/types";
 
@@ -17,23 +17,10 @@ export default function AddProjectModal({ open, onClose, project }: Props) {
   const [error, setError] = useState("");
 
   // Edit mode state
-  const [editTags, setEditTags] = useState<string[]>([]);
+  const [editTags, setEditTags] = useState<string[]>(() => [...(project?.tags ?? [])]);
   const [tagInput, setTagInput] = useState("");
 
   const isEdit = !!project;
-
-  useEffect(() => {
-    if (!open) {
-      setError("");
-      setLoading(false);
-      setEditTags([]);
-      setTagInput("");
-      return;
-    }
-    if (project) {
-      setEditTags([...(project.tags ?? [])]);
-    }
-  }, [open, project]);
 
   const addTag = () => {
     const trimmed = tagInput.trim();

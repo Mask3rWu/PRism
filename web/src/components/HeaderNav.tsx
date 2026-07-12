@@ -11,7 +11,8 @@ export default function HeaderNav() {
 
   useEffect(() => {
     if (!isOnboardingDismissed()) {
-      setOnboardingOpen(true);
+      const timer = window.setTimeout(() => setOnboardingOpen(true), 0);
+      return () => window.clearTimeout(timer);
     }
   }, []);
 
@@ -61,10 +62,7 @@ export default function HeaderNav() {
         onOpenSettings={handleOpenSettings}
         onClose={() => setOnboardingOpen(false)}
       />
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </>
   );
 }

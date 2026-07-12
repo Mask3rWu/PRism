@@ -14,7 +14,7 @@ export default function BackToProjectLink({
   return (
     <button
       type="button"
-      onClick={() => router.back()}
+      onClick={() => router.push(`/projects/${projectId}`)}
       className={`cursor-pointer ${className || ""}`}
     >
       <svg

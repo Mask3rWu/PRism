@@ -4,20 +4,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Settings } from "@/types";
 
 interface Props {
-  open: boolean;
   onClose: () => void;
 }
 
 type Tab = "general" | "pat" | "llm";
 
-export default function SettingsModal({ open, onClose }: Props) {
+export default function SettingsModal({ onClose }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const llmFormRef = useRef<HTMLFormElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("general");
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [llmVerifying, setLlmVerifying] = useState(false);
-  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [error, setError] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [verifiedPat, setVerifiedPat] = useState("");
@@ -25,24 +24,12 @@ export default function SettingsModal({ open, onClose }: Props) {
   const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setError("");
-      setLoading(false);
-      setVerifying(false);
-      setLlmVerifying(false);
-      setVerifiedPat("");
-      setVerifiedLlm(false);
-      setActiveTab("general");
-      return;
-    }
-
-    setStatusLoading(true);
     fetch("/api/settings")
       .then((res) => res.json())
       .then((data: Settings) => setSettings(data))
       .catch(() => setError("Failed to load settings"))
       .finally(() => setStatusLoading(false));
-  }, [open]);
+  }, []);
 
   // ── PAT handlers ──
 
@@ -271,8 +258,6 @@ export default function SettingsModal({ open, onClose }: Props) {
     }
   }, []);
 
-  if (!open) return null;
-
   const hasCustomLlm = settings?.llm?.has_api_key;
   const reviewCount = settings?.review_count ?? 0;
   const maxFree = settings?.max_free_reviews ?? 0;
@@ -475,7 +460,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                       GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
                     </a>
                   </li>
-                  <li>Click "Generate new token" → "Generate new token (classic)"</li>
+                  <li>Click &quot;Generate new token&quot; → &quot;Generate new token (classic)&quot;</li>
                   <li>Set an expiration date and select the following scopes:</li>
                 </ol>
                 <ul className="list-disc list-inside mt-1 space-y-0.5">

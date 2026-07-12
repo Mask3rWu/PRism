@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ProjectCard from "@/components/ProjectCard";
 import AddProjectModal from "@/components/AddProjectModal";
 import AddRepoModal from "@/components/AddRepoModal";
 import type { Project } from "@/types";
+
+function projectTags(projects: Project[]): string[] {
+  return Array.from(new Set(projects.flatMap((project) => project.tags ?? []))).sort();
+}
 
 export default function ProjectList({
   initialProjects,
@@ -15,6 +19,7 @@ export default function ProjectList({
 }) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [total, setTotal] = useState(initialTotal);
+  const [knownTags, setKnownTags] = useState<string[]>(() => projectTags(initialProjects));
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [addRepoOpen, setAddRepoOpen] = useState(false);
@@ -33,6 +38,7 @@ export default function ProjectList({
   const [deleting, setDeleting] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filtersInitialized = useRef(false);
 
   const fetchProjects = useCallback(
     async (searchTerm: string, tagFilters: string[], favOnly: boolean, currentPage: number) => {
@@ -49,6 +55,7 @@ export default function ProjectList({
         const data = await res.json();
         setProjects(data.items ?? []);
         setTotal(data.total ?? 0);
+        setKnownTags((current) => Array.from(new Set([...current, ...projectTags(data.items ?? [])])).sort());
         setFetchError("");
       } catch {
         setFetchError("Could not load projects. Is the backend running?");
@@ -57,8 +64,12 @@ export default function ProjectList({
     [],
   );
 
-  // Debounced search
+  // Debounced search and filter requests.
   useEffect(() => {
+    if (!filtersInitialized.current) {
+      filtersInitialized.current = true;
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
@@ -67,33 +78,9 @@ export default function ProjectList({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search]);
+  }, [search, selectedTags, favoriteOnly, fetchProjects]);
 
-  // Tag, favorite, or page change — fetch immediately
-  useEffect(() => {
-    // Skip initial render since we already have data
-    const isInitial =
-      search === "" && selectedTags.length === 0 && !favoriteOnly && page === 1 &&
-      projects === initialProjects;
-    if (isInitial) return;
-    fetchProjects(search, selectedTags, favoriteOnly, page);
-  }, [selectedTags, favoriteOnly, page]);
-
-  const allTagsCache = useRef<string[]>([]);
-
-  const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    const src = projects.length > 0 ? projects : [];
-    src.forEach((p) => (p.tags ?? []).forEach((t) => tagSet.add(t)));
-    // Merge cached tags so filter bar doesn't shrink when filtering
-    allTagsCache.current.forEach((t) => tagSet.add(t));
-    const result = Array.from(tagSet).sort();
-    // Update cache when no filters active (full list)
-    if (selectedTags.length === 0 && !favoriteOnly && projects.length > 0) {
-      allTagsCache.current = result;
-    }
-    return result;
-  }, [projects, selectedTags.length, favoriteOnly]);
+  const allTags = knownTags;
 
   const openEditModal = (project: Project) => {
     setEditingProject(project);
@@ -109,6 +96,11 @@ export default function ProjectList({
   const closeAddRepo = () => {
     setAddRepoOpen(false);
     fetchProjects(search, selectedTags, favoriteOnly, page);
+  };
+
+  const changePage = (nextPage: number) => {
+    setPage(nextPage);
+    fetchProjects(search, selectedTags, favoriteOnly, nextPage);
   };
 
   const handleSingleDelete = async () => {
@@ -310,7 +302,7 @@ export default function ProjectList({
             <div className="mt-6 flex items-center justify-center gap-2">
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => changePage(Math.max(1, page - 1))}
                 disabled={page <= 1}
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
               >
@@ -321,7 +313,7 @@ export default function ProjectList({
               </span>
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => changePage(Math.min(totalPages, page + 1))}
                 disabled={page >= totalPages}
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
               >
@@ -398,17 +390,21 @@ export default function ProjectList({
         </div>
       )}
 
-      <AddProjectModal
-        open={editModalOpen}
-        onClose={closeEditModal}
-        project={editingProject}
-      />
-      <AddRepoModal
-        open={addRepoOpen}
-        initialTab="personal"
-        onClose={closeAddRepo}
-        existingRepos={new Set(projects.map((p) => `${p.repo_owner}/${p.repo_name}`))}
-      />
+      {editModalOpen && (
+        <AddProjectModal
+          open
+          onClose={closeEditModal}
+          project={editingProject}
+        />
+      )}
+      {addRepoOpen && (
+        <AddRepoModal
+          open
+          initialTab="personal"
+          onClose={closeAddRepo}
+          existingRepos={new Set(projects.map((p) => `${p.repo_owner}/${p.repo_name}`))}
+        />
+      )}
     </div>
   );
 }
