@@ -17,7 +17,13 @@ RETRYABLE_STATUS = {500, 502, 503, 504}
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 
 
-async def llm_call(system_prompt: str, user_prompt: str) -> tuple[str, dict]:
+async def llm_call(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    response_format: dict | None = None,
+    max_tokens: int | None = None,
+) -> tuple[str, dict]:
     """Call the configured LLM and return (content, meta).
 
     meta fields: model, endpoint, latency_ms, status_code, retry_count, retry_errors
@@ -46,20 +52,26 @@ async def llm_call(system_prompt: str, user_prompt: str) -> tuple[str, dict]:
             t0 = time.time()
             try:
                 async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                    payload: dict = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": 0.3,
+                    }
+                    if response_format is not None:
+                        payload["response_format"] = response_format
+                    if max_tokens is not None:
+                        payload["max_tokens"] = max_tokens
+
                     resp = await client.post(
                         endpoint,
                         headers={
                             "Authorization": f"Bearer {config['api_key']}",
                             "Content-Type": "application/json",
                         },
-                        json={
-                            "model": model,
-                            "messages": [
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": user_prompt},
-                            ],
-                            "temperature": 0.3,
-                        },
+                        json=payload,
                     )
                     status = resp.status_code
                     elapsed = int((time.time() - t0) * 1000)
@@ -160,7 +172,13 @@ def _extract_usage(usage: object) -> dict[str, int] | None:
     return normalized or None
 
 
-async def llm_call_json(system_prompt: str, user_prompt: str) -> tuple[dict, dict]:
+async def llm_call_json(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    response_format: dict | None = None,
+    max_tokens: int | None = None,
+) -> tuple[dict, dict]:
     """Call the LLM and parse the response as JSON. Returns (parsed_json, meta).
 
     Retries the LLM call if JSON parsing fails (empty or malformed response).
@@ -169,7 +187,12 @@ async def llm_call_json(system_prompt: str, user_prompt: str) -> tuple[dict, dic
     last_meta: dict = {}
 
     for json_attempt in range(MAX_JSON_RETRIES + 1):
-        text, meta = await llm_call(system_prompt, user_prompt)
+        text, meta = await llm_call(
+            system_prompt,
+            user_prompt,
+            response_format=response_format,
+            max_tokens=max_tokens,
+        )
         last_meta = meta
         text = text.strip()
 

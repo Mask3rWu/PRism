@@ -1,7 +1,13 @@
 import asyncio
 import unittest
 
-from backend.agents.nodes.coordinator import _normalise_result, build_fallback_coordinator_result
+from backend.agents.nodes.coordinator import (
+    FINALIZER_MAX_TOOL_CONTEXT_CHARS,
+    FINALIZER_MAX_TOOL_RESULTS,
+    _build_finalizer_tool_results,
+    _normalise_result,
+    build_fallback_coordinator_result,
+)
 from backend.agents.review_graph import dispatch_selected_experts
 from backend.agents.tools.context import ReviewContextTools, _safe_path
 from backend.agents.tools.change_inventory import build_change_inventory, compact_inventory
@@ -135,6 +141,32 @@ class ContextToolSafetyTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             asyncio.run(tools.search_repository("token repo:another/repo"))
+
+
+class FinalizerContextTests(unittest.TestCase):
+    def test_finalizer_receives_only_bounded_tool_messages(self):
+        ToolMessage = type("ToolMessage", (), {})
+        AIMessage = type("AIMessage", (), {})
+        messages = []
+        for index in range(FINALIZER_MAX_TOOL_RESULTS + 3):
+            message = ToolMessage()
+            message.name = f"tool_{index}"
+            message.content = "x" * 10_000
+            messages.append(message)
+        ignored = AIMessage()
+        ignored.name = "model"
+        ignored.content = "model reasoning must not be forwarded"
+        messages.insert(0, ignored)
+
+        results = _build_finalizer_tool_results(messages)
+
+        self.assertLessEqual(len(results), FINALIZER_MAX_TOOL_RESULTS)
+        self.assertGreater(len(results), 0)
+        self.assertLessEqual(
+            sum(len(result["result"]) for result in results),
+            FINALIZER_MAX_TOOL_CONTEXT_CHARS,
+        )
+        self.assertNotIn("model reasoning", str(results))
 
 
 class CoordinatorDispatchTests(unittest.TestCase):

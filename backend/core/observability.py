@@ -17,6 +17,24 @@ def langfuse_enabled() -> bool:
     return bool(settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY)
 
 
+def langchain_callbacks() -> list[Any]:
+    """Return ReAct tracing callbacks only when full content tracing is enabled."""
+    if not langfuse_enabled() or not settings.LANGFUSE_TRACE_CONTENT:
+        return []
+
+    # CallbackHandler reuses the initialized client and records each LangChain
+    # model and tool run as a child observation.
+    if get_langfuse_client() is None:
+        return []
+    try:
+        from langfuse.langchain import CallbackHandler
+
+        return [CallbackHandler(public_key=settings.LANGFUSE_PUBLIC_KEY)]
+    except Exception:
+        # ReAct tracing must not change review availability.
+        return []
+
+
 @lru_cache(maxsize=1)
 def get_langfuse_client() -> Any | None:
     """Create the client lazily so disabled tracing has no runtime impact."""
