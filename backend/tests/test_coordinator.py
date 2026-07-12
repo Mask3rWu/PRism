@@ -159,7 +159,6 @@ diff --git a/app/config.py b/app/config.py
             result,
             ["security_review"],
             build_change_inventory(diff),
-            [{"tool": "get_change_inventory", "success": True, "result_chars": 1}],
             "",
             diff,
         )
@@ -167,6 +166,7 @@ diff --git a/app/config.py b/app/config.py
         self.assertEqual(normalised.common_context.changed_files, ["app/auth.py", "app/config.py"])
         self.assertIn("app/config.py", normalised.expert_contexts["security_review"].relevant_files)
         self.assertTrue(normalised.common_context.evidence)
+        self.assertNotIn("tool_summary", normalised.routing_plan.model_dump())
 
     def test_normalisation_preserves_documentation_expert_context(self):
         diff = """diff --git a/docs/api.md b/docs/api.md
@@ -187,7 +187,6 @@ diff --git a/app/config.py b/app/config.py
             result,
             ["issue_detection", "docs_review", "general_review"],
             build_change_inventory(diff),
-            [],
             "",
             diff,
         )

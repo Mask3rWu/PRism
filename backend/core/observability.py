@@ -6,11 +6,14 @@ prompts, and model responses are only sent when LANGFUSE_TRACE_CONTENT=true.
 
 from contextlib import contextmanager
 from functools import lru_cache
+import logging
 import sys
 from typing import Any, Iterator
 from urllib.parse import urlparse
 
 from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def langfuse_enabled() -> bool:
@@ -31,7 +34,9 @@ def langchain_callbacks() -> list[Any]:
 
         return [CallbackHandler(public_key=settings.LANGFUSE_PUBLIC_KEY)]
     except Exception:
-        # ReAct tracing must not change review availability.
+        # ReAct tracing must not change review availability, but a missing
+        # integration dependency must be visible to operators.
+        logger.exception("Failed to initialize Langfuse LangChain callback")
         return []
 
 

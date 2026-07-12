@@ -47,7 +47,6 @@ class CoordinatorRoutingPlan(BaseModel):
     unselected_agents: dict[str, list[str]] = Field(default_factory=dict)
     fallback_used: bool = False
     fallback_reason: str = ""
-    tool_summary: list[dict[str, str | int | bool]] = Field(default_factory=list, max_length=50)
 
 
 class CoordinatorResult(BaseModel):

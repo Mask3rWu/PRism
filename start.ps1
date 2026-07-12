@@ -105,7 +105,7 @@ New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
 Stop-PrismListener -Port $BackendPort -Name "backend" -CommandPattern "(?i)uvicorn.*backend\.main:app"
 Stop-PrismListener -Port $FrontendPort -Name "frontend" -CommandPattern "(?i)PRism[\\/]web[\\/]node_modules[\\/]next"
 
-& $PythonExe -c "import fastapi, langfuse, langgraph, mcp, pydantic_settings" 2>$null
+& $PythonExe -c "import fastapi, langchain, langfuse, langgraph, mcp, pydantic_settings" 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Installing backend dependencies..."
     & $PythonExe -m pip install -r (Join-Path $ProjectRoot "backend\requirements.txt")

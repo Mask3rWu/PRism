@@ -77,6 +77,17 @@ class ObservabilityTests(unittest.TestCase):
 
         handler.assert_called_once_with(public_key=observability.settings.LANGFUSE_PUBLIC_KEY)
 
+    def test_langchain_callback_initialization_logs_and_degrades_gracefully(self):
+        observability.settings.LANGFUSE_TRACE_CONTENT = True
+
+        with patch.object(observability, "langfuse_enabled", return_value=True), patch.object(
+            observability, "get_langfuse_client", return_value=object()
+        ), patch("langfuse.langchain.CallbackHandler", side_effect=RuntimeError("missing dependency")):
+            with self.assertLogs(observability.logger, level="ERROR") as logs:
+                self.assertEqual(observability.langchain_callbacks(), [])
+
+        self.assertIn("Failed to initialize Langfuse LangChain callback", logs.output[0])
+
     def test_content_is_retained_when_content_tracing_is_enabled(self):
         observability.settings.LANGFUSE_TRACE_CONTENT = True
 
