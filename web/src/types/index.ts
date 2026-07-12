@@ -220,8 +220,17 @@ export interface FixSuggestion {
   verification: string;
 }
 
+export interface ExpertResult {
+  agent: string;
+  label: string;
+  focus: string;
+  routing_reasons: string[];
+  findings: ReviewFinding[];
+}
+
 export interface FinalReport {
   routing_plan: RoutingPlan;
+  experts: ExpertResult[];
   findings: ReviewFinding[];
   fix_suggestions: FixSuggestion[];
   summary: {
@@ -243,7 +252,7 @@ export interface ReviewDetail {
   issue_result: IssueResult | null;
   test_result: TestResult | null;
   routing_plan: RoutingPlan | null;
-  expert_results: Record<string, unknown>[] | null;
+  expert_results: ExpertResult[] | null;
   final_report: FinalReport | null;
   comment_content: string | null;
   writeback_error: string | null;
