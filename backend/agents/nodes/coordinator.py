@@ -135,7 +135,6 @@ def _normalise_result(
     result: CoordinatorResult,
     enabled_agents: list[str],
     inventory: dict,
-    tool_summary: list[dict[str, str | int | bool]],
     project_description: str,
     pr_diff: str,
 ) -> CoordinatorResult:
@@ -156,7 +155,6 @@ def _normalise_result(
         fallback = build_fallback_coordinator_result(
             project_description, inventory, enabled_agents, "Coordinator 未选择任何可用专家，已启用安全回退。"
         )
-        fallback.routing_plan.tool_summary = tool_summary
         return fallback
 
     result.routing_plan.selected_agents = selected
@@ -170,7 +168,6 @@ def _normalise_result(
         for agent, reasons in result.routing_plan.unselected_agents.items()
         if agent in normal_routable and agent in EXPERTS and agent not in selected
     }
-    result.routing_plan.tool_summary = tool_summary
     result.common_context.changed_files = files
 
     # Every dispatched expert receives at least a factual changed-file baseline.
@@ -359,12 +356,11 @@ async def coordinator_node(state: ReviewState) -> dict:
         try:
             result = await _run_react_coordinator(tools, project_description, inventory, enabled_agents)
             result = _normalise_result(
-                result, enabled_agents, inventory, tools.tool_summary, project_description, pr_diff
+                result, enabled_agents, inventory, project_description, pr_diff
             )
         except Exception as exc:
             fallback_reason = f"Coordinator ReAct 不可用：{type(exc).__name__}"
             result = build_fallback_coordinator_result(project_description, inventory, enabled_agents, fallback_reason)
-            result.routing_plan.tool_summary = tools.tool_summary
 
         data = result.model_dump(mode="json")
         review.summary_result = data["pr_summary"]
