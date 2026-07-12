@@ -140,6 +140,7 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
   const [postingComment, setPostingComment] = useState(false);
   const [commentPosted, setCommentPosted] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [selectedExpert, setSelectedExpert] = useState<string | null>(null);
 
   async function handlePostComment() {
     flushSync(() => {
@@ -189,6 +190,9 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
   const testResult = rawTest && { ...rawTest, suggested_tests: suggestedTests };
   const finalReport = review.final_report;
   const routingPlan = finalReport?.routing_plan ?? review.routing_plan;
+  const expertResults = review.expert_results ?? finalReport?.experts ?? [];
+  const activeExpert = expertResults.find((expert) => expert.agent === selectedExpert)
+    ?? expertResults[0];
 
   const statusStyle =
     STATUS_STYLES[review.status] ||
@@ -345,6 +349,7 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
         <CollapsibleSection
           title="Dynamic Review Plan"
           icon="Route"
+          defaultOpen={false}
           badge={
             <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               {finalReport.summary.total_findings} findings
@@ -383,6 +388,124 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
               </div>
             )}
           </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Findings returned by the dynamically selected experts */}
+      {expertResults.length > 0 && (
+        <CollapsibleSection
+          title="Expert Findings"
+          icon="Results"
+          badge={
+            <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              {expertResults.reduce((count, expert) => count + expert.findings.length, 0)} findings
+            </span>
+          }
+        >
+          <div role="tablist" aria-label="Expert review results" className="flex gap-1 overflow-x-auto border-b border-zinc-200 pb-2 dark:border-zinc-800">
+            {expertResults.map((expert) => (
+              <button
+                key={expert.agent}
+                id={`expert-tab-${expert.agent}`}
+                type="button"
+                role="tab"
+                aria-selected={activeExpert?.agent === expert.agent}
+                aria-controls={`expert-panel-${expert.agent}`}
+                onClick={() => setSelectedExpert(expert.agent)}
+                className={`shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
+                  activeExpert?.agent === expert.agent
+                    ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                    : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                }`}
+              >
+                {expert.label || AGENT_LABELS[expert.agent] || expert.agent}
+                <span className="ml-1.5 text-zinc-400 dark:text-zinc-500">{expert.findings.length}</span>
+              </button>
+            ))}
+          </div>
+
+          {activeExpert && (
+            <section
+              id={`expert-panel-${activeExpert.agent}`}
+              role="tabpanel"
+              aria-labelledby={`expert-tab-${activeExpert.agent}`}
+              className="pt-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {activeExpert.label || AGENT_LABELS[activeExpert.agent] || activeExpert.agent}
+                </h3>
+                {activeExpert.focus && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {activeExpert.focus}
+                  </span>
+                )}
+              </div>
+
+              {activeExpert.routing_reasons.length > 0 && (
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  {activeExpert.routing_reasons.join(" ")}
+                </p>
+              )}
+
+              {activeExpert.findings.length === 0 ? (
+                <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+                  No findings reported.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-4">
+                  {activeExpert.findings.map((finding, index) => (
+                    <article
+                      key={`${finding.file}-${finding.line_number}-${finding.title}-${index}`}
+                      className="border-l-2 border-zinc-200 pl-3 dark:border-zinc-700"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLES[finding.severity] || "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}
+                        >
+                          {finding.severity.toUpperCase()}
+                        </span>
+                        <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                          {finding.title}
+                        </h4>
+                      </div>
+
+                      <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+                        {finding.reason}
+                      </p>
+
+                      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        {finding.file}
+                        {finding.line_number ? `:${finding.line_number}` : ""}
+                        {finding.category ? ` - ${finding.category}` : ""}
+                        {finding.confidence ? ` - ${finding.confidence} confidence` : ""}
+                      </p>
+
+                      {finding.evidence && (
+                        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded bg-zinc-100 px-2 py-1.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          {finding.evidence}
+                        </pre>
+                      )}
+
+                      {finding.fix_suggestion && (
+                        <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+                          <span className="font-medium text-zinc-900 dark:text-zinc-100">Fix: </span>
+                          {finding.fix_suggestion}
+                        </p>
+                      )}
+
+                      {finding.verification && (
+                        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Verify: </span>
+                          {finding.verification}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </CollapsibleSection>
       )}
 
