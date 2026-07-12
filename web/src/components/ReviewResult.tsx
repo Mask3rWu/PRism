@@ -344,17 +344,12 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
         </CollapsibleSection>
       )}
 
-      {/* Dynamic routing and structured repairs */}
+      {/* Dynamic routing */}
       {finalReport && (
         <CollapsibleSection
           title="Dynamic Review Plan"
           icon="Route"
           defaultOpen={false}
-          badge={
-            <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              {finalReport.summary.total_findings} findings
-            </span>
-          }
         >
           <div className="space-y-4">
             <div>
@@ -373,20 +368,6 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
                 </p>
               ))}
             </div>
-
-            {finalReport.fix_suggestions.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Repair Suggestions</h3>
-                {finalReport.fix_suggestions.map((suggestion) => (
-                  <div key={suggestion.finding_id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                    <p className="text-sm text-zinc-800 dark:text-zinc-200">{suggestion.suggestion}</p>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {suggestion.file}{suggestion.line_number ? `:${suggestion.line_number}` : ""} - Verify: {suggestion.verification}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </CollapsibleSection>
       )}
