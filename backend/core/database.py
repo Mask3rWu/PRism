@@ -54,12 +54,13 @@ def _migrate_db():
         if "agent_language" not in columns:
             conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN agent_language TEXT DEFAULT 'zh'")
         if "enabled_agents" not in columns:
-            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN enabled_agents TEXT DEFAULT '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\"]'")
-        # Fix existing rows that have the old empty default
+            conn.exec_driver_sql("ALTER TABLE app_settings ADD COLUMN enabled_agents TEXT DEFAULT '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\", \"docs_review\", \"general_review\"]'")
+        # Backfill only known historical defaults; preserve explicit user selections.
         conn.exec_driver_sql(
-            "UPDATE app_settings SET enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\"]' "
+            "UPDATE app_settings SET enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\", \"docs_review\", \"general_review\"]' "
             "WHERE enabled_agents = '[]' OR enabled_agents IS NULL OR enabled_agents = '' "
-            "OR enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]'"
+            "OR enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\"]' "
+            "OR enabled_agents = '[\"risk_analysis\", \"issue_detection\", \"test_suggestions\", \"security_review\", \"performance_review\", \"business_compliance_review\"]'"
         )
         conn.commit()
 

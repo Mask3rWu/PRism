@@ -348,6 +348,8 @@ export default function SettingsModal({ onClose }: Props) {
                   { key: "security_review", label: "Security Review", desc: "Review authorization, secrets, and untrusted input changes" },
                   { key: "performance_review", label: "Performance Review", desc: "Review database, I/O, and resource-use risks" },
                   { key: "business_compliance_review", label: "Business & Compliance", desc: "Review business rules, privacy, and auditability" },
+                  { key: "docs_review", label: "Documentation Review", desc: "Verify documentation accuracy and consistency with code" },
+                  { key: "general_review", label: "General Change Review", desc: "Review cross-file consistency and changes without a specialist" },
                 ] as const).map((agent) => (
                   <label key={agent.key} className="flex items-start gap-3 cursor-pointer">
                     <input
@@ -356,7 +358,7 @@ export default function SettingsModal({ onClose }: Props) {
                       onChange={async (e) => {
                         const current = settings?.enabled_agents?.length
                           ? settings.enabled_agents
-                          : ["risk_analysis", "issue_detection", "test_suggestions", "security_review", "performance_review", "business_compliance_review"];
+                          : ["risk_analysis", "issue_detection", "test_suggestions", "security_review", "performance_review", "business_compliance_review", "docs_review", "general_review"];
                         const updated = e.target.checked
                           ? [...current, agent.key]
                           : current.filter((a) => a !== agent.key);

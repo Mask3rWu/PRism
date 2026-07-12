@@ -4,13 +4,14 @@ import unittest
 from backend.agents.nodes.coordinator import (
     FINALIZER_MAX_TOOL_CONTEXT_CHARS,
     FINALIZER_MAX_TOOL_RESULTS,
+    _build_finalizer_prompt,
     _build_finalizer_tool_results,
     _normalise_result,
     build_fallback_coordinator_result,
 )
 from backend.agents.review_graph import dispatch_selected_experts
 from backend.agents.tools.context import ReviewContextTools, _safe_path
-from backend.agents.tools.change_inventory import build_change_inventory, compact_inventory
+from backend.agents.tools.change_inventory import build_change_inventory, compact_inventory, is_docs_only
 from backend.schemas.coordinator import (
     CommonContext,
     CoordinatorResult,
@@ -48,6 +49,23 @@ new file mode 100644
         self.assertEqual(inventory["total_deletions"], 2)
         self.assertNotIn("patch", compact_inventory(inventory)["files"][0])
 
+    def test_docs_only_inventory_recognises_extensions_and_readme(self):
+        diff = """diff --git a/README b/README
+--- a/README
++++ b/README
+@@ -1 +1 @@
+-Old command
++New command
+diff --git a/docs/api.rst b/docs/api.rst
+--- a/docs/api.rst
++++ b/docs/api.rst
+@@ -1 +1 @@
+-Old API
++New API
+"""
+
+        self.assertTrue(is_docs_only(build_change_inventory(diff)))
+
 
 class CoordinatorContractTests(unittest.TestCase):
     def test_fallback_routes_core_agents_and_keeps_diff_evidence(self):
@@ -60,7 +78,7 @@ class CoordinatorContractTests(unittest.TestCase):
 """
         result = build_fallback_coordinator_result(
             "A service project",
-            diff,
+            build_change_inventory(diff),
             ["issue_detection", "test_suggestions", "security_review"],
             "Tool calling unavailable",
         )
@@ -69,6 +87,41 @@ class CoordinatorContractTests(unittest.TestCase):
         self.assertEqual(result.routing_plan.selected_agents, ["issue_detection", "test_suggestions"])
         self.assertEqual(result.common_context.evidence[0].path, "app/service.py")
         self.assertEqual(set(result.expert_contexts), set(result.routing_plan.selected_agents))
+
+    def test_docs_only_fallback_routes_documentation_review(self):
+        diff = """diff --git a/docs/usage.md b/docs/usage.md
+--- a/docs/usage.md
++++ b/docs/usage.md
+@@ -1 +1 @@
+-prism review 1
++prism review 2
+"""
+        result = build_fallback_coordinator_result(
+            "A service project",
+            build_change_inventory(diff),
+            ["docs_review", "general_review"],
+            "Tool calling unavailable",
+        )
+
+        self.assertEqual(result.routing_plan.selected_agents, ["docs_review"])
+        self.assertIn("docs_review", result.expert_contexts)
+
+    def test_unknown_file_fallback_routes_general_review(self):
+        diff = """diff --git a/Dockerfile b/Dockerfile
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1 +1 @@
+-FROM python:3.12
++FROM python:3.13
+"""
+        result = build_fallback_coordinator_result(
+            "A service project",
+            build_change_inventory(diff),
+            ["general_review", "issue_detection"],
+            "Tool calling unavailable",
+        )
+
+        self.assertEqual(result.routing_plan.selected_agents, ["general_review"])
 
     def test_schema_rejects_context_for_unselected_agent(self):
         payload = {
@@ -114,6 +167,33 @@ diff --git a/app/config.py b/app/config.py
         self.assertEqual(normalised.common_context.changed_files, ["app/auth.py", "app/config.py"])
         self.assertIn("app/config.py", normalised.expert_contexts["security_review"].relevant_files)
         self.assertTrue(normalised.common_context.evidence)
+
+    def test_normalisation_preserves_documentation_expert_context(self):
+        diff = """diff --git a/docs/api.md b/docs/api.md
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -1 +1 @@
+-GET /v1/items
++GET /v2/items
+"""
+        result = CoordinatorResult(
+            pr_summary=PrSummary(overview="摘要"),
+            common_context=CommonContext(change_intent="更新 API 文档"),
+            routing_plan=CoordinatorRoutingPlan(selected_agents=["issue_detection"]),
+            expert_contexts={"issue_detection": ExpertContext(relevant_files=["docs/api.md"])},
+        )
+
+        normalised = _normalise_result(
+            result,
+            ["issue_detection", "docs_review", "general_review"],
+            build_change_inventory(diff),
+            [],
+            "",
+            diff,
+        )
+
+        self.assertEqual(normalised.routing_plan.selected_agents, ["issue_detection", "docs_review"])
+        self.assertIn("docs_review", normalised.expert_contexts)
 
 
 class ContextToolSafetyTests(unittest.TestCase):
@@ -167,6 +247,19 @@ class FinalizerContextTests(unittest.TestCase):
             FINALIZER_MAX_TOOL_CONTEXT_CHARS,
         )
         self.assertNotIn("model reasoning", str(results))
+
+    def test_finalizer_catalog_includes_documentation_and_reserves_general_review(self):
+        prompt = _build_finalizer_prompt(
+            "",
+            {"files": [], "changed_file_count": 0, "total_additions": 0, "total_deletions": 0},
+            ["docs_review", "general_review"],
+            [],
+        )
+
+        self.assertIn('"key": "docs_review"', prompt)
+        self.assertIn("documentation accuracy", prompt)
+        self.assertNotIn('"key": "general_review"', prompt)
+        self.assertIn("`general_review` is reserved for deterministic fallback", prompt)
 
 
 class CoordinatorDispatchTests(unittest.TestCase):

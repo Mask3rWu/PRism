@@ -97,7 +97,7 @@ class AppSettings(Base):
     llm_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     agent_language: Mapped[str] = mapped_column(String(8), nullable=False, default="zh")
-    enabled_agents: Mapped[str] = mapped_column(Text, default='["risk_analysis", "issue_detection", "test_suggestions", "security_review", "performance_review", "business_compliance_review"]', nullable=False)
+    enabled_agents: Mapped[str] = mapped_column(Text, default='["risk_analysis", "issue_detection", "test_suggestions", "security_review", "performance_review", "business_compliance_review", "docs_review", "general_review"]', nullable=False)
 
 
 class ApiCallLog(Base):

@@ -6,6 +6,28 @@ import re
 
 _DIFF_HEADER = re.compile(r"^diff --git a/(.+) b/(.+)$")
 _HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$")
+_DOCS_EXTENSIONS = {".md", ".rst", ".txt", ".adoc", ".markdown"}
+_DOCS_FILENAMES = {"readme", "changelog", "changes", "contributing", "authors"}
+
+
+def is_docs_path(path: str) -> bool:
+    """Return whether a repository path is conventionally maintained documentation."""
+    filename = path.rsplit("/", 1)[-1].lower()
+    _, dot, extension = filename.rpartition(".")
+    if dot and f".{extension}" in _DOCS_EXTENSIONS:
+        return True
+    return filename in _DOCS_FILENAMES
+
+
+def is_docs_only(inventory: dict) -> bool:
+    """Return true only for a non-empty inventory containing documentation files."""
+    files = inventory.get("files", [])
+    return bool(files) and all(is_docs_path(str(item.get("path", ""))) for item in files)
+
+
+def has_docs_changes(inventory: dict) -> bool:
+    """Return whether an inventory contains at least one documentation file."""
+    return any(is_docs_path(str(item.get("path", ""))) for item in inventory.get("files", []))
 
 
 def build_change_inventory(pr_diff: str, path: str | None = None) -> dict:

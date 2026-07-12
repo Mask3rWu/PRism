@@ -45,6 +45,8 @@ const AGENT_LABELS: Record<string, string> = {
   security_review: "Security Review",
   performance_review: "Performance Review",
   business_compliance_review: "Business & Compliance Review",
+  docs_review: "Documentation Review",
+  general_review: "General Change Review",
   aggregate_results: "Result Aggregation",
   comment_compose: "Comment Compose",
 };

@@ -36,6 +36,19 @@ class DynamicRoutingTests(unittest.TestCase):
 
         self.assertEqual(plan["selected_agents"], ["security_review"])
 
+    def test_routes_documentation_changes_to_documentation_review(self):
+        diff = """diff --git a/docs/cli.md b/docs/cli.md
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -1 +1 @@
+-prism review 1
++prism review 2
+"""
+
+        plan = build_routing_plan(diff, ["docs_review", "general_review"])
+
+        self.assertEqual(plan["selected_agents"], ["docs_review"])
+
     def test_rejects_unknown_agent(self):
         with self.assertRaises(ValueError):
             validate_enabled_agents(["security_review", "unknown"])

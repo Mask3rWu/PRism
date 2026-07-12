@@ -10,7 +10,12 @@ from typing import Any
 
 from backend.agents.routing import DEFAULT_ENABLED_AGENTS, EXPERTS
 from backend.agents.states import ReviewState
-from backend.agents.tools.change_inventory import build_change_inventory, compact_inventory
+from backend.agents.tools.change_inventory import (
+    build_change_inventory,
+    compact_inventory,
+    has_docs_changes,
+    is_docs_only,
+)
 from backend.agents.tools.context import ReviewContextTools
 from backend.core.database import SessionLocal
 from backend.core.llm_config import get_llm_config
@@ -34,23 +39,27 @@ FINALIZER_MAX_TOOL_RESULT_CHARS = 4_000
 FINALIZER_MAX_TOOL_CONTEXT_CHARS = 24_000
 FINALIZER_MAX_PROJECT_CONTEXT_CHARS = 4_000
 _CORE_FALLBACK_AGENTS = ("issue_detection", "test_suggestions", "risk_analysis")
+_FALLBACK_ONLY_AGENTS = {"general_review"}
 
 
-def _fallback_agents(enabled_agents: list[str]) -> list[str]:
+def _fallback_agents(enabled_agents: list[str], inventory: dict) -> list[str]:
+    if is_docs_only(inventory) and "docs_review" in enabled_agents:
+        return ["docs_review"]
+    if "general_review" in enabled_agents:
+        return ["general_review"]
     selected = [agent for agent in _CORE_FALLBACK_AGENTS if agent in enabled_agents]
     return selected or enabled_agents[:1]
 
 
 def build_fallback_coordinator_result(
     project_description: str,
-    pr_diff: str,
+    inventory: dict,
     enabled_agents: list[str],
     reason: str,
 ) -> CoordinatorResult:
     """Produce an evidence-labelled safe fallback when tool-capable routing is unavailable."""
-    inventory = build_change_inventory(pr_diff)
     files = [str(item.get("path", "")) for item in inventory["files"] if item.get("path")]
-    selected = _fallback_agents(enabled_agents) if files else []
+    selected = _fallback_agents(enabled_agents, inventory) if files else []
     evidence = [
         Evidence(
             source_type="pr_diff",
@@ -131,12 +140,21 @@ def _normalise_result(
     pr_diff: str,
 ) -> CoordinatorResult:
     allowed = set(enabled_agents)
-    selected = list(dict.fromkeys(agent for agent in result.routing_plan.selected_agents if agent in allowed and agent in EXPERTS))
+    normal_routable = allowed - _FALLBACK_ONLY_AGENTS
+    selected = list(dict.fromkeys(
+        agent for agent in result.routing_plan.selected_agents if agent in normal_routable and agent in EXPERTS
+    ))
     files = [str(item.get("path", "")) for item in inventory.get("files", []) if item.get("path")]
+
+    if has_docs_changes(inventory) and "docs_review" in allowed and "docs_review" not in selected:
+        selected.append("docs_review")
+        result.routing_plan.reasons.setdefault(
+            "docs_review", ["检测到文档变更，需核对其与代码、API 或配置的一致性。"]
+        )
 
     if files and not selected:
         fallback = build_fallback_coordinator_result(
-            project_description, pr_diff, enabled_agents, "Coordinator 未选择任何可用专家，已启用安全回退。"
+            project_description, inventory, enabled_agents, "Coordinator 未选择任何可用专家，已启用安全回退。"
         )
         fallback.routing_plan.tool_summary = tool_summary
         return fallback
@@ -150,7 +168,7 @@ def _normalise_result(
     result.routing_plan.unselected_agents = {
         agent: reasons
         for agent, reasons in result.routing_plan.unselected_agents.items()
-        if agent in allowed and agent in EXPERTS and agent not in selected
+        if agent in normal_routable and agent in EXPERTS and agent not in selected
     }
     result.routing_plan.tool_summary = tool_summary
     result.common_context.changed_files = files
@@ -199,7 +217,8 @@ def _coordinator_prompt() -> str:
 facts needed to understand the PR and prepare later specialist review.
 
 Collect evidence about changed behavior, relevant files, callers, configuration, and tests when
-needed. Do not determine whether a defect, vulnerability, or risk exists. Do not propose fixes or
+needed. When documentation changes, collect the code, API, commands, or configuration that the
+documentation describes so a specialist can check consistency. Do not determine whether a defect, vulnerability, or risk exists. Do not propose fixes or
 severity. Do not produce the final PR summary, routing plan, or JSON: a separate finalizer uses
 the tool results for those tasks.
 
@@ -221,6 +240,37 @@ def _build_finalizer_tool_results(messages: list[Any]) -> list[dict[str, str]]:
         if len(results) >= FINALIZER_MAX_TOOL_RESULTS:
             break
     return results
+
+
+def _build_finalizer_prompt(
+    project_description: str,
+    inventory: dict,
+    enabled_agents: list[str],
+    tool_results: list[dict[str, str]],
+) -> str:
+    expert_catalog = [
+        {"key": definition.key, "label": definition.label, "focus": definition.focus}
+        for key, definition in EXPERTS.items()
+        if key in enabled_agents and key not in _FALLBACK_ONLY_AGENTS
+    ]
+    return f"""You are the final structured-output stage of a PR review coordinator.
+Use only the supplied deterministic inventory and tool results as factual evidence. Do not decide whether defects, vulnerabilities, or risks exist; specialists do that later.
+All JSON values must be Simplified Chinese except JSON keys, paths, symbols, and technical identifiers.
+
+Return JSON only in this exact shape:
+{{
+  "pr_summary": {{"overview": "...", "scope": ["..."], "key_changes": ["..."]}},
+  "common_context": {{"change_intent": "...", "affected_components": ["..."], "behavior_before_after": ["..."], "changed_files": ["..."], "known_unknowns": ["..."], "evidence": [{{"source_type": "pr_diff|repository_file|pr_metadata|project_description", "path": "...", "ref": "...", "start_line": 0, "end_line": 0, "excerpt": "...", "fact": "..."}}]}},
+  "routing_plan": {{"selected_agents": ["..."], "reasons": {{"agent": ["..."]}}, "unselected_agents": {{"agent": ["..."]}}}},
+  "expert_contexts": {{"agent": {{"relevant_changes": ["..."], "relevant_files": ["..."], "related_symbols": ["..."], "related_tests": ["..."], "evidence": [], "unresolved_context": ["..."]}}}}
+}}
+
+Select agents only from the enabled expert catalog. Select Documentation Review whenever changed documentation needs consistency checks. `general_review` is reserved for deterministic fallback and must not be selected here.
+Expert catalog: {json.dumps(expert_catalog, ensure_ascii=False)}
+Enabled routable agents: {json.dumps([agent for agent in enabled_agents if agent not in _FALLBACK_ONLY_AGENTS], ensure_ascii=False)}
+Project context: {project_description[:FINALIZER_MAX_PROJECT_CONTEXT_CHARS]}
+Initial inventory: {json.dumps(compact_inventory(inventory), ensure_ascii=False)}
+Tool results: {json.dumps(tool_results, ensure_ascii=False)}"""
 
 
 async def _run_react_coordinator(
@@ -265,22 +315,9 @@ async def _run_react_coordinator(
         raise ValueError("Coordinator completed without using any context tool")
 
     tool_results = _build_finalizer_tool_results(response.get("messages", []))
-    finalizer_prompt = f"""You are the final structured-output stage of a PR review coordinator.
-Use only the supplied deterministic inventory and tool results as factual evidence. Do not decide whether defects, vulnerabilities, or risks exist; specialists do that later.
-All JSON values must be Simplified Chinese except JSON keys, paths, symbols, and technical identifiers.
-
-Return JSON only in this exact shape:
-{{
-  "pr_summary": {{"overview": "...", "scope": ["..."], "key_changes": ["..."]}},
-  "common_context": {{"change_intent": "...", "affected_components": ["..."], "behavior_before_after": ["..."], "changed_files": ["..."], "known_unknowns": ["..."], "evidence": [{{"source_type": "pr_diff|repository_file|pr_metadata|project_description", "path": "...", "ref": "...", "start_line": 0, "end_line": 0, "excerpt": "...", "fact": "..."}}]}},
-  "routing_plan": {{"selected_agents": ["..."], "reasons": {{"agent": ["..."]}}, "unselected_agents": {{"agent": ["..."]}}}},
-  "expert_contexts": {{"agent": {{"relevant_changes": ["..."], "relevant_files": ["..."], "related_symbols": ["..."], "related_tests": ["..."], "evidence": [], "unresolved_context": ["..."]}}}}
-}}
-
-Enabled agents: {json.dumps(enabled_agents, ensure_ascii=False)}
-Project context: {project_description[:FINALIZER_MAX_PROJECT_CONTEXT_CHARS]}
-Initial inventory: {json.dumps(compact_inventory(inventory), ensure_ascii=False)}
-Tool results: {json.dumps(tool_results, ensure_ascii=False)}"""
+    finalizer_prompt = _build_finalizer_prompt(
+        project_description, inventory, enabled_agents, tool_results
+    )
     final_data, _ = await llm_call_json(
         "You produce only a valid JSON object matching the requested coordinator schema.",
         finalizer_prompt,
@@ -326,7 +363,7 @@ async def coordinator_node(state: ReviewState) -> dict:
             )
         except Exception as exc:
             fallback_reason = f"Coordinator ReAct 不可用：{type(exc).__name__}"
-            result = build_fallback_coordinator_result(project_description, pr_diff, enabled_agents, fallback_reason)
+            result = build_fallback_coordinator_result(project_description, inventory, enabled_agents, fallback_reason)
             result.routing_plan.tool_summary = tools.tool_summary
 
         data = result.model_dump(mode="json")
