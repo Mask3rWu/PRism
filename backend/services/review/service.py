@@ -6,6 +6,7 @@ from backend.agents.routing import DEFAULT_ENABLED_AGENTS
 from backend.agents.states import ReviewState
 from backend.core.config import settings
 from backend.core.database import SessionLocal
+from backend.core.observability import observe_review, review_metadata, update_observation
 from backend.models import AppSettings, Review, ReviewStatus
 from backend.services.github.client import fetch_pr_diff, writeback_comment
 
@@ -32,66 +33,104 @@ async def _run_review_background(
             db.commit()
 
             project = review.project
-            diff = await fetch_pr_diff(
-                project.repo_owner, project.repo_name,
-                review.pr_number,
+            metadata = review_metadata(
+                review_id=review.id,
+                project_id=project.id,
+                repo_owner=project.repo_owner,
+                repo_name=project.repo_name,
+                pr_number=review.pr_number,
+                enabled_agents=enabled_agents if enabled_agents is not None else DEFAULT_ENABLED_AGENTS,
             )
-
-            db.refresh(review)
-            if diff is None:
-                review.status = ReviewStatus.failed
-                review.error_message = "Failed to fetch PR diff from GitHub"
-                review.completed_at = datetime.now(timezone.utc)
-                db.commit()
-                return
-
-            review.diff_content = diff
-            review.stage = "diff_fetched"
-            review.write_comment = write_comment
-            db.commit()
-
-            state: ReviewState = {
-                "project_description": project.description or "",
-                "pr_diff": diff,
-                "review_id": review_id,
-                "enabled_agents": enabled_agents if enabled_agents is not None else DEFAULT_ENABLED_AGENTS,
-                "write_comment": write_comment,
-            }
-            try:
-                await review_graph.ainvoke(state)
-            except Exception as e:
-                db.refresh(review)
-                if review.status != ReviewStatus.failed:
-                    review.status = ReviewStatus.failed
-                    review.error_message = str(e)
-                    review.completed_at = datetime.now(timezone.utc)
-                    db.commit()
-                return
-
-            db.refresh(review)
-            review.status = ReviewStatus.succeeded
-            review.completed_at = datetime.now(timezone.utc)
-            db.commit()
-
-            # Increment free review count if using default LLM
-            app_settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
-            if app_settings and not app_settings.encrypted_llm_api_key:
-                app_settings.review_count += 1
-                db.commit()
-
-            if write_comment and review.comment_content:
-                review_link = f"{settings.FRONTEND_URL}/reviews/{review_id}"
-                full_comment = review.comment_content.replace(
-                    "https://github.com", review_link
-                )
-                ok = await writeback_comment(
+            with observe_review(metadata) as observation:
+                diff = await fetch_pr_diff(
                     project.repo_owner, project.repo_name,
                     review.pr_number,
-                    full_comment,
                 )
-                if not ok:
-                    db.refresh(review)
-                    review.writeback_error = "Failed to post comment to GitHub"
+
+                db.refresh(review)
+                if diff is None:
+                    review.status = ReviewStatus.failed
+                    review.error_message = "Failed to fetch PR diff from GitHub"
+                    review.completed_at = datetime.now(timezone.utc)
                     db.commit()
+                    update_observation(
+                        observation,
+                        output={"status": "failed"},
+                        metadata={**metadata, "status": "failed"},
+                        level="ERROR",
+                        status_message=review.error_message,
+                    )
+                    return
+
+                review.diff_content = diff
+                review.stage = "diff_fetched"
+                review.write_comment = write_comment
+                db.commit()
+
+                state: ReviewState = {
+                    "project_description": project.description or "",
+                    "pr_diff": diff,
+                    "review_id": review_id,
+                    "enabled_agents": enabled_agents if enabled_agents is not None else DEFAULT_ENABLED_AGENTS,
+                    "write_comment": write_comment,
+                }
+                try:
+                    await review_graph.ainvoke(state)
+                except Exception as e:
+                    db.refresh(review)
+                    if review.status != ReviewStatus.failed:
+                        review.status = ReviewStatus.failed
+                        review.error_message = str(e)
+                        review.completed_at = datetime.now(timezone.utc)
+                        db.commit()
+                    update_observation(
+                        observation,
+                        output={"status": "failed"},
+                        metadata={**metadata, "status": "failed"},
+                        level="ERROR",
+                        status_message=str(e),
+                    )
+                    return
+
+                db.refresh(review)
+                review.status = ReviewStatus.succeeded
+                review.completed_at = datetime.now(timezone.utc)
+                db.commit()
+
+                # Increment free review count if using default LLM
+                app_settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
+                if app_settings and not app_settings.encrypted_llm_api_key:
+                    app_settings.review_count += 1
+                    db.commit()
+
+                if write_comment and review.comment_content:
+                    review_link = f"{settings.FRONTEND_URL}/reviews/{review_id}"
+                    full_comment = review.comment_content.replace(
+                        "https://github.com", review_link
+                    )
+                    ok = await writeback_comment(
+                        project.repo_owner, project.repo_name,
+                        review.pr_number,
+                        full_comment,
+                    )
+                    if not ok:
+                        db.refresh(review)
+                        review.writeback_error = "Failed to post comment to GitHub"
+                        db.commit()
+
+                update_observation(
+                    observation,
+                    output={
+                        "status": "succeeded",
+                        "findings": (review.final_report or {}).get("summary", {}).get("total_findings", 0),
+                        "writeback_succeeded": not bool(review.writeback_error),
+                    },
+                    metadata={
+                        **metadata,
+                        "status": "succeeded",
+                        "findings": (review.final_report or {}).get("summary", {}).get("total_findings", 0),
+                        "writeback_succeeded": not bool(review.writeback_error),
+                    },
+                )
     finally:
         db.close()

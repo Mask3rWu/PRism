@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from backend.core.config import settings
 from backend.core.database import Base, _migrate_db, engine
+from backend.core.observability import shutdown_langfuse
 from backend.core.security import ensure_fernet_key
 import backend.models  # noqa: F401 — register ORM models with Base.metadata
 
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
     if settings.ENABLE_SEED:
         seed_database()
     yield
+    shutdown_langfuse()
 
 
 app = FastAPI(title="PRism", version="0.1.0", lifespan=lifespan)

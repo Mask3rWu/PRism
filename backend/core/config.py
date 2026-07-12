@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     FERNET_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
     ENABLE_SEED: bool = False
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_ENVIRONMENT: str = "development"
+    LANGFUSE_RELEASE: str = ""
+    LANGFUSE_TRACE_CONTENT: bool = False
+    LANGFUSE_INPUT_COST_PER_1M_TOKENS: float = 0.0
+    LANGFUSE_CACHE_HIT_INPUT_COST_PER_1M_TOKENS: float = 0.0
+    LANGFUSE_CACHE_MISS_INPUT_COST_PER_1M_TOKENS: float = 0.0
+    LANGFUSE_OUTPUT_COST_PER_1M_TOKENS: float = 0.0
 
 
 settings = Settings()
