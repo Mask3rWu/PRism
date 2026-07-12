@@ -14,6 +14,7 @@ from backend.agents.tools.change_inventory import build_change_inventory, compac
 from backend.agents.tools.context import ReviewContextTools
 from backend.core.database import SessionLocal
 from backend.core.llm_config import get_llm_config
+from backend.core.llm_client import llm_call_json
 from backend.models import AgentTiming, Review, ReviewStatus
 from backend.schemas.coordinator import (
     CommonContext,
@@ -26,6 +27,11 @@ from backend.schemas.coordinator import (
 
 REACT_RECURSION_LIMIT = 20
 REACT_TIMEOUT_SECONDS = 120
+COORDINATOR_FINALIZER_MAX_TOKENS = 4096
+FINALIZER_MAX_TOOL_RESULTS = 8
+FINALIZER_MAX_TOOL_RESULT_CHARS = 4_000
+FINALIZER_MAX_TOOL_CONTEXT_CHARS = 24_000
+FINALIZER_MAX_PROJECT_CONTEXT_CHARS = 4_000
 _CORE_FALLBACK_AGENTS = ("issue_detection", "test_suggestions", "risk_analysis")
 
 
@@ -188,20 +194,32 @@ def _normalise_result(
 
 
 def _coordinator_prompt() -> str:
-    return """你是 PRism 的审查协调员。你可以使用只读工具收集 PR 与仓库事实。
+    return """You are the PRism research coordinator. Use only the read-only tools to collect
+facts needed to understand the PR and prepare later specialist review.
 
-职责：生成用户摘要、基于变更语义选择已启用的专家、为每个被选专家组织带来源的事实证据包。
-边界：不要判断缺陷是否成立，不要评估漏洞、严重性或修复方案；这些由专家完成。不要将推测写成事实。
+Collect evidence about changed behavior, relevant files, callers, configuration, and tests when
+needed. Do not determine whether a defect, vulnerability, or risk exists. Do not propose fixes or
+severity. Do not produce the final PR summary, routing plan, or JSON: a separate finalizer uses
+the tool results for those tasks.
 
-开始时必须调用 `get_change_inventory`；随后按需调用其他工具补齐与所选专家相关的仓库事实。最终仅输出符合以下 JSON 结构的对象，不要输出 Markdown：
-{
-  "pr_summary": {"overview": "...", "scope": ["..."], "key_changes": ["..."]},
-  "common_context": {"change_intent": "...", "affected_components": ["..."], "behavior_before_after": ["..."], "changed_files": ["..."], "known_unknowns": ["..."], "evidence": [{"source_type": "pr_diff|repository_file|pr_metadata|project_description", "path": "...", "ref": "...", "start_line": 0, "end_line": 0, "excerpt": "...", "fact": "..."}]},
-  "routing_plan": {"selected_agents": ["..."], "reasons": {"agent": ["..."]}, "unselected_agents": {"agent": ["..."]}},
-  "expert_contexts": {"agent": {"relevant_changes": ["..."], "relevant_files": ["..."], "related_symbols": ["..."], "related_tests": ["..."], "evidence": [], "unresolved_context": ["..."]}}
-}
+Do not repeat tool results in your final response. Once you have enough evidence, finish with a
+short plain-text completion message."""
 
-只可从已启用的专家中选择。每个 evidence 必须是工具或输入直接证实的事实，并带 source_type；仓库文件必须带 path、ref 和行号。"""
+
+def _build_finalizer_tool_results(messages: list[Any]) -> list[dict[str, str]]:
+    """Pass bounded tool evidence, never model messages or reasoning, to the finalizer."""
+    results: list[dict[str, str]] = []
+    remaining = FINALIZER_MAX_TOOL_CONTEXT_CHARS
+    for message in messages:
+        if type(message).__name__ != "ToolMessage" or remaining <= 0:
+            continue
+        content = str(getattr(message, "content", ""))
+        content = content[:min(FINALIZER_MAX_TOOL_RESULT_CHARS, remaining)]
+        results.append({"tool": str(getattr(message, "name", "context_tool")), "result": content})
+        remaining -= len(content)
+        if len(results) >= FINALIZER_MAX_TOOL_RESULTS:
+            break
+    return results
 
 
 async def _run_react_coordinator(
@@ -238,9 +256,33 @@ async def _run_react_coordinator(
         ),
         timeout=REACT_TIMEOUT_SECONDS,
     )
-    if not any(item.get("tool") == "get_change_inventory" for item in tools.tool_summary):
-        raise ValueError("Coordinator did not inspect the change inventory")
-    return _parse_result(_extract_message_text(response))
+    if not tools.tool_summary:
+        raise ValueError("Coordinator completed without using any context tool")
+
+    tool_results = _build_finalizer_tool_results(response.get("messages", []))
+    finalizer_prompt = f"""You are the final structured-output stage of a PR review coordinator.
+Use only the supplied deterministic inventory and tool results as factual evidence. Do not decide whether defects, vulnerabilities, or risks exist; specialists do that later.
+All JSON values must be Simplified Chinese except JSON keys, paths, symbols, and technical identifiers.
+
+Return JSON only in this exact shape:
+{{
+  "pr_summary": {{"overview": "...", "scope": ["..."], "key_changes": ["..."]}},
+  "common_context": {{"change_intent": "...", "affected_components": ["..."], "behavior_before_after": ["..."], "changed_files": ["..."], "known_unknowns": ["..."], "evidence": [{{"source_type": "pr_diff|repository_file|pr_metadata|project_description", "path": "...", "ref": "...", "start_line": 0, "end_line": 0, "excerpt": "...", "fact": "..."}}]}},
+  "routing_plan": {{"selected_agents": ["..."], "reasons": {{"agent": ["..."]}}, "unselected_agents": {{"agent": ["..."]}}}},
+  "expert_contexts": {{"agent": {{"relevant_changes": ["..."], "relevant_files": ["..."], "related_symbols": ["..."], "related_tests": ["..."], "evidence": [], "unresolved_context": ["..."]}}}}
+}}
+
+Enabled agents: {json.dumps(enabled_agents, ensure_ascii=False)}
+Project context: {project_description[:FINALIZER_MAX_PROJECT_CONTEXT_CHARS]}
+Initial inventory: {json.dumps(compact_inventory(inventory), ensure_ascii=False)}
+Tool results: {json.dumps(tool_results, ensure_ascii=False)}"""
+    final_data, _ = await llm_call_json(
+        "You produce only a valid JSON object matching the requested coordinator schema.",
+        finalizer_prompt,
+        response_format={"type": "json_object"},
+        max_tokens=COORDINATOR_FINALIZER_MAX_TOKENS,
+    )
+    return CoordinatorResult.model_validate(final_data)
 
 
 async def coordinator_node(state: ReviewState) -> dict:
