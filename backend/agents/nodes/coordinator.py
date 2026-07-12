@@ -15,6 +15,7 @@ from backend.agents.tools.context import ReviewContextTools
 from backend.core.database import SessionLocal
 from backend.core.llm_config import get_llm_config
 from backend.core.llm_client import llm_call_json
+from backend.core.observability import langchain_callbacks
 from backend.models import AgentTiming, Review, ReviewStatus
 from backend.schemas.coordinator import (
     CommonContext,
@@ -249,10 +250,14 @@ async def _run_react_coordinator(
         "change_inventory": compact_inventory(inventory),
         "instruction": "请收集足够的可追溯事实后完成协调结果。",
     }
+    react_config: dict[str, Any] = {"recursion_limit": REACT_RECURSION_LIMIT}
+    callbacks = langchain_callbacks()
+    if callbacks:
+        react_config["callbacks"] = callbacks
     response = await asyncio.wait_for(
         agent.ainvoke(
             {"messages": [{"role": "user", "content": json.dumps(initial_input, ensure_ascii=False)}]},
-            {"recursion_limit": REACT_RECURSION_LIMIT},
+            react_config,
         ),
         timeout=REACT_TIMEOUT_SECONDS,
     )

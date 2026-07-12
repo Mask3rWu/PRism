@@ -58,6 +58,30 @@ class ObservabilityTests(unittest.TestCase):
         )
         self.assertNotIn("private", str(observability._content({"diff": "private diff"})))
 
+    def test_langchain_callbacks_require_content_tracing(self):
+        observability.settings.LANGFUSE_TRACE_CONTENT = False
+        with patch.object(observability, "langfuse_enabled", return_value=True), patch.object(
+            observability, "get_langfuse_client"
+        ) as get_client:
+            self.assertEqual(observability.langchain_callbacks(), [])
+        get_client.assert_not_called()
+
+    def test_langchain_callbacks_use_initialized_client(self):
+        callback = object()
+        observability.settings.LANGFUSE_TRACE_CONTENT = True
+
+        with patch.object(observability, "langfuse_enabled", return_value=True), patch.object(
+            observability, "get_langfuse_client", return_value=object()
+        ), patch("langfuse.langchain.CallbackHandler", return_value=callback) as handler:
+            self.assertEqual(observability.langchain_callbacks(), [callback])
+
+        handler.assert_called_once_with(public_key=observability.settings.LANGFUSE_PUBLIC_KEY)
+
+    def test_content_is_retained_when_content_tracing_is_enabled(self):
+        observability.settings.LANGFUSE_TRACE_CONTENT = True
+
+        self.assertEqual(observability._content("private diff"), "private diff")
+
     def test_generation_update_preserves_usage_and_cost(self):
         observation = FakeObservation()
 
