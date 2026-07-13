@@ -1,29 +1,24 @@
 import json
+import logging
 from datetime import datetime, timezone
 
 from backend.agents.routing import EXPERTS
 from backend.agents.states import ReviewState
 from backend.core.database import SessionLocal
-from backend.core.llm_client import llm_call_json
+from backend.core.llm_client import llm_call, llm_call_json
 from backend.models import AgentTiming, Review, ReviewStatus
 
+logger = logging.getLogger(__name__)
 
-def _build_prompt(
-    agent: str,
+
+def _shared_prompt_prefix(
     project_description: str,
     summary: dict,
     common_context: dict,
-    expert_context: dict,
     pr_diff: str,
-) -> tuple[str, str]:
-    definition = EXPERTS[agent]
-    system_prompt = "You are a code review specialist. Always respond with valid JSON only."
-    user_prompt = f"""You are the {definition.label} specialist. Review the PR change below.
-
-Focus: {definition.focus}.
-
-Project context:
-{project_description}
+) -> str:
+    return f"""PR diff:
+{pr_diff}
 
 PR summary:
 {json.dumps(summary, ensure_ascii=False)}
@@ -31,11 +26,8 @@ PR summary:
 Common facts collected by the Coordinator:
 {json.dumps(common_context, ensure_ascii=False)}
 
-Evidence package prepared for your specialty:
-{json.dumps(expert_context, ensure_ascii=False)}
-
-PR diff:
-{pr_diff}
+Project context:
+{project_description}
 
 Return JSON only in this exact shape:
 {{
@@ -55,8 +47,59 @@ Return JSON only in this exact shape:
   ]
 }}
 
+"""
+
+
+def _build_prompt(
+    agent: str,
+    project_description: str,
+    summary: dict,
+    common_context: dict,
+    expert_context: dict,
+    pr_diff: str,
+) -> tuple[str, str]:
+    definition = EXPERTS[agent]
+    system_prompt = "You are a code review specialist. Always respond with valid JSON only."
+    shared_prefix = _shared_prompt_prefix(project_description, summary, common_context, pr_diff)
+    user_prompt = f"""{shared_prefix}
+
+You are the {definition.label} specialist. Review the PR change.
+Focus: {definition.focus}.
+
+Evidence package prepared for your specialty:
+{json.dumps(expert_context, ensure_ascii=False)}
+
 Report only evidence-backed findings. Use Chinese for all finding content."""
     return system_prompt, user_prompt
+
+
+async def expert_cache_warmup_node(state: ReviewState) -> dict:
+    """Prime the provider cache with the exact shared expert-prompt prefix."""
+    if not state.get("selected_agents"):
+        return {}
+
+    system_prompt = "You are a code review specialist. Always respond with valid JSON only."
+    user_prompt = _shared_prompt_prefix(
+        state.get("project_description", ""),
+        state.get("summary_result") or {},
+        state.get("common_context") or {},
+        state.get("pr_diff", ""),
+    )
+    try:
+        await llm_call(
+            system_prompt,
+            user_prompt,
+            max_tokens=1,
+            observation_metadata={
+                "purpose": "expert_cache_warmup",
+                "cache_prefix": "expert_shared_prompt",
+            },
+        )
+    except Exception:
+        # Cache warming is an optimization; an unavailable warm-up endpoint must
+        # never make the actual review unavailable.
+        logger.exception("Expert prompt cache warm-up failed")
+    return {}
 
 
 async def expert_review_node(state: ReviewState) -> dict:
