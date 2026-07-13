@@ -269,3 +269,58 @@ def calculate_cost_details(usage: dict[str, int] | None) -> dict[str, float] | N
     if total_cost == 0:
         return None
     return {"total_cost": total_cost}
+
+
+def find_traces_for_review(review_id: int) -> list[dict[str, Any]]:
+    """Return Langfuse trace references for a given review_id.
+
+    Traces are matched by the ``review_id`` stored in their input/metadata at
+    creation time (see :func:`review_metadata`). The Langfuse public API cannot
+    filter by arbitrary metadata, so we page through ``name=pr_review`` traces
+    and match locally. Each returned dict carries the trace id, timestamp, and a
+    browsable URL so exported snapshots can link back to Langfuse.
+
+    Failures (Langfuse disabled or unreachable) yield an empty list rather than
+    raising, so review export never depends on observability being available.
+    """
+    if not langfuse_enabled() or not settings.LANGFUSE_PUBLIC_KEY or not settings.LANGFUSE_SECRET_KEY:
+        return []
+
+    import httpx
+
+    host = settings.LANGFUSE_HOST.rstrip("/")
+    auth = (settings.LANGFUSE_PUBLIC_KEY, settings.LANGFUSE_SECRET_KEY)
+    matches: list[dict[str, Any]] = []
+    page = 1
+    try:
+        while True:
+            resp = httpx.get(
+                f"{host}/api/public/traces",
+                params={"limit": 100, "page": page, "name": "pr_review"},
+                auth=auth,
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            data = payload.get("data", [])
+            for trace in data:
+                trace_input = trace.get("input") or {}
+                review_block = trace_input.get("review", trace_input) if isinstance(trace_input, dict) else {}
+                if not isinstance(review_block, dict):
+                    continue
+                if review_block.get("review_id") != review_id:
+                    continue
+                matches.append({
+                    "trace_id": trace.get("id"),
+                    "timestamp": trace.get("timestamp"),
+                    "url": f"{host}/trace/{trace.get('id')}",
+                })
+            meta = payload.get("meta") or {}
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages or not data:
+                break
+            page += 1
+    except Exception:
+        logger.exception("Failed to query Langfuse traces for review export")
+        return []
+    return matches
