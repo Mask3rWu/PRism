@@ -23,6 +23,7 @@ async def llm_call(
     *,
     response_format: dict | None = None,
     max_tokens: int | None = None,
+    observation_metadata: dict | None = None,
 ) -> tuple[str, dict]:
     """Call the configured LLM and return (content, meta).
 
@@ -47,7 +48,12 @@ async def llm_call(
     if lang_instruction not in system_prompt:
         system_prompt = f"{system_prompt}\n{lang_instruction}"
 
-    with observe_llm_generation(model, endpoint, system_prompt, user_prompt) as generation:
+    generation_metadata = dict(observation_metadata or {})
+    if max_tokens is not None:
+        generation_metadata.setdefault("max_tokens", max_tokens)
+    with observe_llm_generation(
+        model, endpoint, system_prompt, user_prompt, metadata=generation_metadata
+    ) as generation:
         for attempt in range(MAX_RETRIES + 1):
             t0 = time.time()
             try:
@@ -178,6 +184,7 @@ async def llm_call_json(
     *,
     response_format: dict | None = None,
     max_tokens: int | None = None,
+    observation_metadata: dict | None = None,
 ) -> tuple[dict, dict]:
     """Call the LLM and parse the response as JSON. Returns (parsed_json, meta).
 
@@ -192,6 +199,7 @@ async def llm_call_json(
             user_prompt,
             response_format=response_format,
             max_tokens=max_tokens,
+            observation_metadata=observation_metadata,
         )
         last_meta = meta
         text = text.strip()

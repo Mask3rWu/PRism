@@ -193,13 +193,18 @@ def observe_llm_generation(
     endpoint: str,
     system_prompt: str,
     user_prompt: str,
+    metadata: dict[str, Any] | None = None,
 ) -> Iterator[Any | None]:
+    observation_metadata = {
+        "provider_host": _endpoint_host(endpoint),
+        **(metadata or {}),
+    }
     with _start_observation(
         name="llm.chat.completions",
         as_type="generation",
         model=model,
         model_parameters={"temperature": 0.3},
-        metadata={"provider_host": _endpoint_host(endpoint)},
+        metadata=observation_metadata,
         input=_content({
             "messages": [
                 {"role": "system", "content": system_prompt},
