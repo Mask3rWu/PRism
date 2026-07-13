@@ -18,12 +18,12 @@ def _build_prompt(
 ) -> tuple[str, str]:
     definition = EXPERTS[agent]
     system_prompt = "You are a code review specialist. Always respond with valid JSON only."
-    user_prompt = f"""You are the {definition.label} specialist. Review the PR change below.
-
-Focus: {definition.focus}.
-
-Project context:
-{project_description}
+    # Prompt layout: shared segments first, expert-specific segments last.
+    # DeepSeek prompt cache hits a contiguous prefix shared across experts, so keeping
+    # all shared content (PR diff, summary, common facts, project context, JSON schema)
+    # at the top maximizes the cacheable prefix and lets parallel expert calls hit cache.
+    user_prompt = f"""PR diff:
+{pr_diff}
 
 PR summary:
 {json.dumps(summary, ensure_ascii=False)}
@@ -31,11 +31,8 @@ PR summary:
 Common facts collected by the Coordinator:
 {json.dumps(common_context, ensure_ascii=False)}
 
-Evidence package prepared for your specialty:
-{json.dumps(expert_context, ensure_ascii=False)}
-
-PR diff:
-{pr_diff}
+Project context:
+{project_description}
 
 Return JSON only in this exact shape:
 {{
@@ -54,6 +51,12 @@ Return JSON only in this exact shape:
     }}
   ]
 }}
+
+You are the {definition.label} specialist. Review the PR change.
+Focus: {definition.focus}.
+
+Evidence package prepared for your specialty:
+{json.dumps(expert_context, ensure_ascii=False)}
 
 Report only evidence-backed findings. Use Chinese for all finding content."""
     return system_prompt, user_prompt
