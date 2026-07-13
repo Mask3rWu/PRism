@@ -105,6 +105,7 @@ def export_review(review_id: int, db: Session = Depends(get_db)):
             "pr_number": review.pr_number,
             "pr_title": review.pr_title,
             "status": review.status.value if hasattr(review.status, "value") else review.status,
+            "run_index": review.run_index,
             "stage": review.stage,
             "error_message": review.error_message,
             "summary_result": review.summary_result,

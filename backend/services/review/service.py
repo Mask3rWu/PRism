@@ -17,6 +17,7 @@ async def _run_review_background(
     review_id: int,
     enabled_agents: list[str] | None = None,
     write_comment: bool = True,
+    run_index: int = 0,
 ) -> None:
     """Background task: wait for concurrency slot, fetch PR diff, run review graph."""
     db = SessionLocal()
@@ -40,6 +41,7 @@ async def _run_review_background(
                 repo_name=project.repo_name,
                 pr_number=review.pr_number,
                 enabled_agents=enabled_agents if enabled_agents is not None else DEFAULT_ENABLED_AGENTS,
+                run_index=run_index,
             )
             with observe_review(metadata) as observation:
                 diff = await fetch_pr_diff(
@@ -92,11 +94,6 @@ async def _run_review_background(
                     )
                     return
 
-                db.refresh(review)
-                review.status = ReviewStatus.succeeded
-                review.completed_at = datetime.now(timezone.utc)
-                db.commit()
-
                 # Increment free review count if using default LLM
                 app_settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
                 if app_settings and not app_settings.encrypted_llm_api_key:
@@ -117,6 +114,11 @@ async def _run_review_background(
                         db.refresh(review)
                         review.writeback_error = "Failed to post comment to GitHub"
                         db.commit()
+
+                db.refresh(review)
+                review.status = ReviewStatus.succeeded
+                review.completed_at = datetime.now(timezone.utc)
+                db.commit()
 
                 update_observation(
                     observation,

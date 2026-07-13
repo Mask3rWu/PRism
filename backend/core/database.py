@@ -76,6 +76,8 @@ def _migrate_db():
             conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN expert_results JSON")
         if "final_report" not in columns:
             conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN final_report JSON")
+        if "run_index" not in columns:
+            conn.exec_driver_sql("ALTER TABLE reviews ADD COLUMN run_index INTEGER NOT NULL DEFAULT 0")
         conn.commit()
 
         result = conn.exec_driver_sql("PRAGMA table_info(agent_timings)")

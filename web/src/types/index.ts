@@ -140,6 +140,7 @@ export interface AgentTimingItem {
 export interface ReviewStatusResponse {
   id: number;
   status: string;
+  run_index: number;
   stage: string | null;
   error_message: string | null;
   write_comment: boolean;
@@ -245,6 +246,7 @@ export interface ReviewDetail {
   pr_number: number;
   pr_title: string;
   status: string;
+  run_index: number;
   stage: string | null;
   error_message: string | null;
   summary_result: SummaryResult | null;

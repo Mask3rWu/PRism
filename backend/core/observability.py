@@ -114,6 +114,7 @@ def review_metadata(
     repo_name: str,
     pr_number: int,
     enabled_agents: list[str],
+    run_index: int = 0,
 ) -> dict[str, Any]:
     return {
         "review_id": review_id,
@@ -121,6 +122,7 @@ def review_metadata(
         "repository": f"{repo_owner}/{repo_name}",
         "pr_number": pr_number,
         "enabled_agents": enabled_agents,
+        "run_index": run_index,
     }
 
 
