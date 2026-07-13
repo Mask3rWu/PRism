@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import type { ReviewDetail, IssueItem, RiskItem, TestSuggestion } from "@/types";
 
@@ -140,9 +140,27 @@ function CollapsibleSection({
 export default function ReviewResult({ review, projectPermission }: { review: ReviewDetail; projectPermission?: string }) {
   const [issueSortAsc, setIssueSortAsc] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const [commentPosted, setCommentPosted] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [selectedExpert, setSelectedExpert] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (review.status !== "queued" && review.status !== "running") return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/reviews/${review.id}/status`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === "succeeded" || data.status === "failed") {
+          window.location.reload();
+        }
+      } catch {
+        // A transient polling failure should not interrupt the review page.
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [review.id, review.status]);
 
   async function handlePostComment() {
     flushSync(() => {
@@ -170,7 +188,30 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
     window.location.href = `/api/reviews/${review.id}/export`;
   }
 
+  async function handleRerun() {
+    if (!window.confirm(`Re-review PR #${review.pr_number}? The current result will be overwritten.`)) return;
+    setRerunning(true);
+    try {
+      const res = await fetch(`/api/projects/${review.project_id}/pulls/${review.pr_number}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        window.alert(data.detail || "Re-review failed");
+      }
+    } catch {
+      window.alert("Re-review failed");
+    } finally {
+      setRerunning(false);
+    }
+  }
+
   const canExport = review.status === "succeeded" || review.status === "failed";
+  const canRerun = canExport;
 
   const canComment = !commentPosted && projectPermission && projectPermission !== "Viewer" && review.status === "succeeded" && review.comment_content && !(review.write_comment && !review.writeback_error);
 
@@ -253,6 +294,17 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
                 />
               </svg>
               Export
+            </button>
+          )}
+          {canRerun && (
+            <button
+              type="button"
+              onClick={handleRerun}
+              disabled={rerunning}
+              className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
+            >
+              <span aria-hidden="true">&#8635;</span>
+              {rerunning ? "Re-running..." : "Re-review"}
             </button>
           )}
         </div>

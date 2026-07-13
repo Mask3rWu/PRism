@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.agents.routing import DEFAULT_ENABLED_AGENTS, validate_enabled_agents
 from backend.core.database import get_db
 from backend.core.llm_config import MAX_FREE_REVIEWS
-from backend.models import AppSettings, Project, Review, ReviewStatus
+from backend.models import AgentTiming, AppSettings, Project, Review, ReviewStatus
 from backend.schemas.project import BatchDeleteRequest, PaginatedProjectsResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.schemas.pull_request import PaginatedPRResponse, PullRequestItem, ReviewStats
 from backend.schemas.review import ReviewResponse, ReviewTriggerRequest
@@ -369,9 +369,8 @@ async def trigger_review(
     existing = db.query(Review).filter(
         Review.project_id == project_id,
         Review.pr_number == pr_number,
-        Review.status.in_([ReviewStatus.queued, ReviewStatus.running]),
-    ).first()
-    if existing is not None:
+    ).order_by(Review.id.desc()).first()
+    if existing is not None and existing.status in (ReviewStatus.queued, ReviewStatus.running):
         raise HTTPException(status_code=409, detail="A review is already in progress for this PR")
 
     pr_detail = await fetch_pr_detail(
@@ -381,13 +380,37 @@ async def trigger_review(
     if pr_detail is None:
         raise HTTPException(status_code=502, detail="Failed to fetch PR details from GitHub. If this is a private repo, configure a PAT in Settings.")
 
-    review = Review(
-        project_id=project_id,
-        pr_number=pr_number,
-        pr_title=pr_detail["title"],
-        status=ReviewStatus.queued,
-    )
-    db.add(review)
+    if existing is not None:
+        review = existing
+        review.pr_title = pr_detail["title"]
+        review.status = ReviewStatus.queued
+        review.stage = None
+        review.error_message = None
+        review.summary_result = None
+        review.coordinator_result = None
+        review.risk_result = None
+        review.issue_result = None
+        review.test_result = None
+        review.routing_plan = None
+        review.expert_results = None
+        review.final_report = None
+        review.diff_content = None
+        review.comment_content = None
+        review.writeback_error = None
+        review.started_at = None
+        review.completed_at = None
+        review.write_comment = body.write_comment
+        review.run_index = (review.run_index or 0) + 1
+        db.query(AgentTiming).filter(AgentTiming.review_id == review.id).delete(synchronize_session=False)
+    else:
+        review = Review(
+            project_id=project_id,
+            pr_number=pr_number,
+            pr_title=pr_detail["title"],
+            status=ReviewStatus.queued,
+            run_index=0,
+        )
+        db.add(review)
     db.commit()
     db.refresh(review)
 
@@ -411,6 +434,7 @@ async def trigger_review(
         review.id,
         enabled_agents=effective_agents,
         write_comment=body.write_comment,
+        run_index=review.run_index,
     )
 
     return review

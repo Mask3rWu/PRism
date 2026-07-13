@@ -47,6 +47,7 @@ class Review(Base):
     pr_number: Mapped[int] = mapped_column(Integer, nullable=False)
     pr_title: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus), default=ReviewStatus.queued, nullable=False)
+    run_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     stage: Mapped[str | None] = mapped_column(String(64), default=None)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
     summary_result: Mapped[dict | None] = mapped_column(JSON, default=None)

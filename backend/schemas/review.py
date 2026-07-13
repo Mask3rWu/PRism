@@ -21,6 +21,7 @@ class ReviewStatusResponse(BaseModel):
 
     id: int
     status: str
+    run_index: int = 0
     stage: str | None = None
     error_message: str | None = None
     write_comment: bool = True
@@ -38,6 +39,7 @@ class ReviewResponse(BaseModel):
     pr_number: int
     pr_title: str
     status: str
+    run_index: int = 0
     stage: str | None = None
     error_message: str | None = None
     summary_result: dict | None = None
