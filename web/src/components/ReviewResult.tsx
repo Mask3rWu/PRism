@@ -164,6 +164,14 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
     }
   }
 
+  function handleExport() {
+    // GET endpoint returns a Content-Disposition attachment; navigating to it
+    // triggers a browser download without leaving the page.
+    window.location.href = `/api/reviews/${review.id}/export`;
+  }
+
+  const canExport = review.status === "succeeded" || review.status === "failed";
+
   const canComment = !commentPosted && projectPermission && projectPermission !== "Viewer" && review.status === "succeeded" && review.comment_content && !(review.write_comment && !review.writeback_error);
 
   // Normalize LLM field name variations
@@ -226,6 +234,27 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
           >
             {review.status.charAt(0).toUpperCase() + review.status.slice(1)}
           </span>
+          {canExport && (
+            <button
+              type="button"
+              onClick={handleExport}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/50"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="size-4"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 3a.75.75 0 01.75.75v6.638l1.96-2.158a.75.75 0 111.08 1.04l-3.25 3.5a.75.75 0 01-1.08 0l-3.25-3.5a.75.75 0 111.08-1.04l1.96 2.158V3.75A.75.75 0 0110 3zM3.5 13.75a.75.75 0 01.75.75v2.75h11.5v-2.75a.75.75 0 011.5 0v3.5a.75.75 0 01-.75.75H4.25a.75.75 0 01-.75-.75v-3.5a.75.75 0 01.75-.75z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Export
+            </button>
+          )}
         </div>
         <div className="mt-1 flex items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
           <span>
