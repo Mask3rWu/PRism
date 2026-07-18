@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from backend.agents.review_graph import review_graph
@@ -6,11 +7,29 @@ from backend.agents.routing import DEFAULT_ENABLED_AGENTS
 from backend.agents.states import ReviewState
 from backend.core.config import settings
 from backend.core.database import SessionLocal
-from backend.core.observability import observe_review, review_metadata, update_observation
+from backend.core.observability import flush_langfuse, observe_review, review_metadata, update_observation
 from backend.models import AppSettings, Review, ReviewStatus
 from backend.services.github.client import fetch_pr_diff, writeback_comment
 
+logger = logging.getLogger(__name__)
+
 _review_semaphore = asyncio.Semaphore(3)
+
+
+async def _generate_eval_report_safe(review_id: int, run_index: int) -> None:
+    """Generate the per-run eval report after a review finishes.
+
+    Best-effort by construction: it flushes Langfuse, then calls the report
+    generator, and swallows every error so the review hot path is never
+    affected. The flush runs in a worker thread because the Langfuse SDK's
+    ``flush()`` is blocking.
+    """
+    try:
+        await asyncio.to_thread(flush_langfuse)
+        from backend.services.eval_report import generate_eval_report
+        await generate_eval_report(review_id, run_index)
+    except Exception:
+        logger.exception("Eval report generation failed for review %s", review_id)
 
 
 async def _run_review_background(
@@ -62,6 +81,7 @@ async def _run_review_background(
                         level="ERROR",
                         status_message=review.error_message,
                     )
+                    await _generate_eval_report_safe(review_id, run_index)
                     return
 
                 review.diff_content = diff
@@ -92,6 +112,7 @@ async def _run_review_background(
                         level="ERROR",
                         status_message=str(e),
                     )
+                    await _generate_eval_report_safe(review_id, run_index)
                     return
 
                 # Increment free review count if using default LLM
@@ -134,5 +155,6 @@ async def _run_review_background(
                         "writeback_succeeded": not bool(review.writeback_error),
                     },
                 )
+                await _generate_eval_report_safe(review_id, run_index)
     finally:
         db.close()

@@ -195,7 +195,7 @@ export default function ReviewResult({ review, projectPermission }: { review: Re
       const res = await fetch(`/api/projects/${review.project_id}/pulls/${review.pr_number}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ write_comment: false }),
       });
       if (res.ok) {
         window.location.reload();

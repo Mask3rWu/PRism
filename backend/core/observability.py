@@ -66,6 +66,24 @@ def reset_langfuse_client() -> None:
     get_langfuse_client.cache_clear()
 
 
+def flush_langfuse() -> None:
+    """Force-upload buffered observations without shutting the client down.
+
+    Called before the eval report queries the Langfuse REST API so the trace
+    for the run that just finished is actually queryable (the SDK flushes on a
+    1s/15-event cadence; the final observations would otherwise lag).
+    """
+    if get_langfuse_client.cache_info().currsize == 0:
+        return
+    client = get_langfuse_client()
+    if client is None:
+        return
+    try:
+        client.flush()
+    except Exception:
+        pass
+
+
 def shutdown_langfuse() -> None:
     if get_langfuse_client.cache_info().currsize == 0:
         return
@@ -276,6 +294,89 @@ def calculate_cost_details(usage: dict[str, int] | None) -> dict[str, float] | N
     if total_cost == 0:
         return None
     return {"total_cost": total_cost}
+
+
+def _langfuse_get(path: str, params: dict[str, Any] | None = None) -> Any:
+    """Issue an authenticated GET against the Langfuse public API.
+
+    Shared by trace/observation fetchers. Returns the parsed JSON payload, or
+    ``None`` on any failure so callers can degrade gracefully.
+    """
+    if not langfuse_enabled() or not settings.LANGFUSE_PUBLIC_KEY or not settings.LANGFUSE_SECRET_KEY:
+        return None
+
+    import httpx
+
+    host = settings.LANGFUSE_HOST.rstrip("/")
+    auth = (settings.LANGFUSE_PUBLIC_KEY, settings.LANGFUSE_SECRET_KEY)
+    try:
+        resp = httpx.get(f"{host}{path}", params=params, auth=auth, timeout=15.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logger.exception("Langfuse API request failed: %s", path)
+        return None
+
+
+def fetch_observations(trace_id: str) -> list[dict[str, Any]]:
+    """Return all observations for a trace, or an empty list on failure.
+
+    Mirrors the manual extraction used in ``eval/review_4_trace``: page through
+    ``GET /api/public/observations?traceId=...`` and concatenate ``data``.
+    """
+    if not trace_id:
+        return []
+    observations: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        payload = _langfuse_get("/api/public/observations", {"traceId": trace_id, "limit": 100, "page": page})
+        if payload is None:
+            return observations
+        data = payload.get("data", []) if isinstance(payload, dict) else payload
+        if not data:
+            break
+        observations.extend(data)
+        meta = payload.get("meta") or {} if isinstance(payload, dict) else {}
+        if page >= meta.get("totalPages", 1):
+            break
+        page += 1
+    return observations
+
+
+def fetch_traces_for_review_with_runindex(review_id: int) -> list[dict[str, Any]]:
+    """Return Langfuse traces for a review, each tagged with its ``run_index``.
+
+    Unlike :func:`find_traces_for_review` (which returns only id/timestamp/url),
+    this also extracts ``run_index`` and ``enabled_agents`` from each trace's
+    metadata so the eval report can pick the trace for a specific run and compute
+    routing-pruning rates. Returns ``[{trace_id, run_index, timestamp,
+    enabled_agents, url}]`` sorted by run_index ascending.
+    """
+    payload = _langfuse_get("/api/public/traces", {"limit": 100, "page": 1, "name": "pr_review"})
+    if payload is None:
+        return []
+    data = payload.get("data", []) if isinstance(payload, dict) else payload
+    host = settings.LANGFUSE_HOST.rstrip("/")
+    matches: list[dict[str, Any]] = []
+    for trace in data:
+        trace_input = trace.get("input") or {}
+        review_block = trace_input.get("review", trace_input) if isinstance(trace_input, dict) else {}
+        if not isinstance(review_block, dict) or review_block.get("review_id") != review_id:
+            continue
+        metadata = trace.get("metadata") or {}
+        # run_index may live in trace metadata or in the input review block.
+        run_index = metadata.get("run_index")
+        if run_index is None:
+            run_index = review_block.get("run_index", 0)
+        matches.append({
+            "trace_id": trace.get("id"),
+            "run_index": int(run_index) if run_index is not None else 0,
+            "timestamp": trace.get("timestamp"),
+            "enabled_agents": metadata.get("enabled_agents") or review_block.get("enabled_agents") or [],
+            "url": f"{host}/trace/{trace.get('id')}",
+        })
+    matches.sort(key=lambda item: item["run_index"])
+    return matches
 
 
 def find_traces_for_review(review_id: int) -> list[dict[str, Any]]:

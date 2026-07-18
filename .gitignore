@@ -11,3 +11,7 @@ __pycache__/
 plan.md
 .next/
 .runtime/
+
+# 动态评估结果
+/eval/
+/plan_*.md
